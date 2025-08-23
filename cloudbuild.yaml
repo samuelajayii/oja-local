@@ -1,29 +1,37 @@
+# cloudbuild.yaml
+availableSecrets:
+  secretManager:
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_API_KEY/versions/1"
+      env: ["NEXT_PUBLIC_API_KEY"]
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_AUTH_DOMAIN/versions/1"
+      env: ["NEXT_PUBLIC_AUTH_DOMAIN"]
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_PROJECT_ID/versions/1"
+      env: ["NEXT_PUBLIC_PROJECT_ID"]
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_STORAGE_BUCKET/versions/1"
+      env: ["NEXT_PUBLIC_STORAGE_BUCKET"]
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_MESSAGING_SENDER_ID/versions/1"
+      env: ["NEXT_PUBLIC_MESSAGING_SENDER_ID"]
+    - versionName: "projects/$PROJECT_ID/secrets/NEXT_PUBLIC_APP_ID/versions/1"
+      env: ["NEXT_PUBLIC_APP_ID"]
+
 steps:
-  # Step 1: Build Docker image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [
-      'build', '-t',
-      'europe-west1-docker.pkg.dev/oja-local-469900/marketplace-repo/nextjs:$COMMIT_SHA',
-      '.'
-    ]
-
-  # Step 2: Push Docker image
-  - name: 'gcr.io/cloud-builders/docker'
-    args: [
-      'push',
-      'europe-west1-docker.pkg.dev/oja-local-469900/marketplace-repo/nextjs:$COMMIT_SHA'
-    ]
-
-  # (Optional) Step 3: Deploy to GKE
-  - name: 'gcr.io/cloud-builders/kubectl'
+  - name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    # Secrets above are injected into this step as environment variables.
     args:
-      - 'set'
-      - 'image'
-      - 'deployment/nextjs-app'
-      - 'nextjs=europe-west1-docker.pkg.dev/oja-local-469900/marketplace-repo/nextjs:$COMMIT_SHA'
-    env:
-      - 'CLOUDSDK_COMPUTE_REGION=europe-west1'
-      - 'CLOUDSDK_CONTAINER_CLUSTER=marketplace-cluster'
+      - "-lc"
+      - |
+        set -euo pipefail
+        echo "Building docker image..."
+        docker build \
+          --build-arg NEXT_PUBLIC_API_KEY="$NEXT_PUBLIC_API_KEY" \
+          --build-arg NEXT_PUBLIC_AUTH_DOMAIN="$NEXT_PUBLIC_AUTH_DOMAIN" \
+          --build-arg NEXT_PUBLIC_PROJECT_ID="$NEXT_PUBLIC_PROJECT_ID" \
+          --build-arg NEXT_PUBLIC_STORAGE_BUCKET="$NEXT_PUBLIC_STORAGE_BUCKET" \
+          --build-arg NEXT_PUBLIC_MESSAGING_SENDER_ID="$NEXT_PUBLIC_MESSAGING_SENDER_ID" \
+          --build-arg NEXT_PUBLIC_APP_ID="$NEXT_PUBLIC_APP_ID" \
+          -t "europe-west1-docker.pkg.dev/$PROJECT_ID/oja-local/oja-local:$COMMIT_SHA" .
 
+# images array tells Cloud Build to push the image(s) listed after the build step.
 images:
-  - 'europe-west1-docker.pkg.dev/oja-local-469900/marketplace-repo/nextjs:$COMMIT_SHA'
+  - "europe-west1-docker.pkg.dev/$PROJECT_ID/oja-local/oja-local:$COMMIT_SHA"

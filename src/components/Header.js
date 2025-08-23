@@ -7,10 +7,15 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome'
 import { faMagnifyingGlass } from '@fortawesome/free-solid-svg-icons'
 import { useAuth } from '../app/context/AuthContext'
 import { useRouter } from 'next/navigation'
+import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger, navigationMenuTriggerStyle } from "@/components/ui/navigation-menu"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { getInitials } from '@/lib/utils'
 
 const Header = () => {
     const { currentUser, logout } = useAuth()
     const router = useRouter()
+
+
 
     const handleLogout = async () => {
         try {
@@ -32,12 +37,53 @@ const Header = () => {
                 </Link>
 
                 {/* Links */}
-                <ul className="flex justify-between gap-10 items-center">
-                    <li>Browse Listings</li>
-                    <li>Post Item</li>
-                    <li>Categories</li>
-                    <li>How It Works</li>
-                </ul>
+                <NavigationMenu className='' viewport={false}>
+                    <NavigationMenuList>
+                        <NavigationMenuItem>
+                            <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
+                                <Link href="/listings">Browse Listings</Link>
+                            </NavigationMenuLink>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                            <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
+                                <Link href="/docs">Post Item</Link>
+                            </NavigationMenuLink>
+                        </NavigationMenuItem>
+
+                        <NavigationMenuItem>
+                            <NavigationMenuTrigger>Categories</NavigationMenuTrigger>
+                            <NavigationMenuContent>
+                                <ul className="grid w-[200px] gap-4">
+                                    <li>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Electronics</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Vehicles</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Clothings</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Jewelries</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Furniture</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Other</Link>
+                                        </NavigationMenuLink>
+                                    </li>
+                                </ul>
+                            </NavigationMenuContent>
+                        </NavigationMenuItem>
+                        <NavigationMenuItem>
+                            <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
+                                <Link href="/docs">How It Works</Link>
+                            </NavigationMenuLink>
+                        </NavigationMenuItem>
+                    </NavigationMenuList>
+                </NavigationMenu>
 
                 {/* Search */}
                 <div>
@@ -56,17 +102,23 @@ const Header = () => {
                     {currentUser ? (
                         <>
                             {/* User’s name */}
-                            <span className="text-white font-medium">
-                                {currentUser.displayName || currentUser.email}
-                            </span>
-
-                            {/* Logout */}
-                            <button
-                                onClick={handleLogout}
-                                className="bg-white text-[#00154B] text-sm rounded-lg px-4 py-2 hover:bg-gray-100 transition-all duration-300"
-                            >
-                                Logout
-                            </button>
+                            <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                    <button className="w-10 h-10 flex items-center justify-center rounded-full bg-[#00154B] text-white font-semibold hover:bg-[#00296B] transition-all">
+                                        {getInitials(currentUser.displayName) || currentUser.email}
+                                    </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent className="w-48 text-white mt-2 rounded-xl shadow-lg">
+                                    <DropdownMenuLabel className="text-sm">My Account</DropdownMenuLabel>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem>Profile</DropdownMenuItem>
+                                    <DropdownMenuItem>Billing</DropdownMenuItem>
+                                    <DropdownMenuItem>Team</DropdownMenuItem>
+                                    <DropdownMenuItem>Subscription</DropdownMenuItem>
+                                    <DropdownMenuSeparator />
+                                    <DropdownMenuItem onClick={handleLogout} className="">Logout</DropdownMenuItem>
+                                </DropdownMenuContent>
+                            </DropdownMenu>
                         </>
                     ) : (
                         <Link
@@ -78,7 +130,7 @@ const Header = () => {
                     )}
                 </div>
             </nav>
-        </header>
+        </header >
     )
 }
 

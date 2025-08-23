@@ -36,7 +36,7 @@ export function AuthProvider({ children }) {
     const logout = () => signOut(auth);
 
     return (
-        <AuthContext.Provider value={{ currentUser, logout }}>
+        <AuthContext.Provider value={{ currentUser, loading, logout }}>
             {!loading && children}
         </AuthContext.Provider>
     );

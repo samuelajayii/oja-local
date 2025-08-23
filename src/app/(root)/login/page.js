@@ -49,7 +49,7 @@ export default function SignIn() {
 
         setEmail("");
         setPassword("");
-        router.push('/home'); // Redirect to home page after login
+        router.push('/listings'); // Redirect to listings page after login
     };
 
     const handleSignUp = async (e) => {
@@ -77,7 +77,7 @@ export default function SignIn() {
             setLastName("");
 
             console.log("User signed up:", user);
-            router.push('/home'); // Redirect to home page after signup
+            router.push('/listings'); // Redirect to listings page after signup
         } catch (error) {
             console.error("Error signing up:", error.message);
         }
@@ -104,7 +104,7 @@ export default function SignIn() {
                     });
                 }
             }
-            router.push('/home'); // Redirect to home page after Google sign-in
+            router.push('/listings'); // Redirect to home page after Google sign-in
             console.log("User signed in with Google:", user);
         } catch (error) {
             console.error("Error signing in with Google:", error);

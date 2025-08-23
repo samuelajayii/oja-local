@@ -18,7 +18,7 @@ spec:
       - name: nextjs
         # TODO: Replace <REGION> and <PROJECT_ID> with your details.
         # It is strongly recommended to use a specific version tag instead of 'latest' for production.
-        image: <REGION>-docker.pkg.dev/<PROJECT_ID>/marketplace/nextjs:v1.0.0
+        image: europe-west1-docker.pkg.dev/oja-local-469900/marketplace/nextjs:v1.0.0
         env:
         - name: DB_HOST
           value: "127.0.0.1"
@@ -26,7 +26,7 @@ spec:
           value: "5432"
         # It's best practice to store secrets in a Kubernetes Secret, not directly in the deployment YAML.
         # Create a secret named 'db-credentials' with keys 'user' and 'password'.
-        - name: DB_USER
+        - name: marketplace
           valueFrom:
             secretKeyRef:
               name: db-credentials # The name of your K8s secret
@@ -37,7 +37,7 @@ spec:
               name: db-credentials # The name of your K8s secret
               key: password       # The key in the secret for the password
         - name: DB_NAME
-          value: "marketplace"
+          value: "marketplace-db"
         ports:
         - containerPort: 3000
       - name: cloud-sql-proxy
@@ -47,6 +47,6 @@ spec:
           - "--structured-logs"
           - "--port=5432"
           # TODO: Replace <PROJECT_ID> with your actual project ID.
-          - "<PROJECT_ID>:us-central1:marketplace-db" # Your Cloud SQL instance connection name
+          - "oja-local-469900:europe-west1:marketplace-db" # Your Cloud SQL instance connection name
         securityContext:
           runAsNonRoot: true

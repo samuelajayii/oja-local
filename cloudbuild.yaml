@@ -1,0 +1,8 @@
+steps:
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/oja-local-46990/oja-local', '.']
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+

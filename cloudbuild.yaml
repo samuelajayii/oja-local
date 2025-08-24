@@ -1,8 +1,9 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-t', 'gcr.io/oja-local-46990/oja-local', '.']
+    args: ['build', '-t', 'europe-west1-docker.pkg.dev/oja-local-46990/oja-local-repo/oja-local:latest', '.']
 
 options:
   logging: CLOUD_LOGGING_ONLY
 
-
+images:
+  - 'europe-west1-docker.pkg.dev/oja-local-46990/oja-local-repo/oja-local:latest'

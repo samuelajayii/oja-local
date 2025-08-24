@@ -39,6 +39,7 @@ export default function SignIn() {
 
     const handleLogin = async (e) => {
         e.preventDefault();
+        if (!auth) return;
         try {
             const userCredential = await signInWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
@@ -53,6 +54,7 @@ export default function SignIn() {
     };
 
     const handleSignUp = async (e) => {
+        if (!auth) return;
         e.preventDefault();
         try {
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
@@ -88,6 +90,7 @@ export default function SignIn() {
 
     const handleGoogleSignIn = async (e) => {
         e.preventDefault();
+        if (!auth) return;
         try {
             await signInWithPopup(auth, provider);
             const user = auth.currentUser;

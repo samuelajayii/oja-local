@@ -1,48 +1,49 @@
 "use client";
 import { createContext, useContext, useEffect, useState } from "react";
 import {
-    onAuthStateChanged,
-    signOut,
-    setPersistence,
-    browserLocalPersistence
+  onAuthStateChanged,
+  signOut,
+  setPersistence,
+  browserLocalPersistence
 } from "firebase/auth";
-import { auth } from "../lib/firebase"; // your firebase config
+import { auth } from "../lib/firebase";
 
-// Create context
 const AuthContext = createContext();
 
-// Provider
 export function AuthProvider({ children }) {
-    const [currentUser, setCurrentUser] = useState(null);
-    const [loading, setLoading] = useState(true);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        // Force session persistence
-        setPersistence(auth, browserLocalPersistence)
-            .then(() => {
-                // Listen for auth state changes
-                const unsubscribe = onAuthStateChanged(auth, (user) => {
-                    setCurrentUser(user);
-                    setLoading(false);
-                });
-                return unsubscribe;
-            })
-            .catch((error) => {
-                console.error("Auth persistence error:", error);
-                setLoading(false);
-            });
-    }, []);
+  useEffect(() => {
+    // 👇 only run if auth is available (client-side)
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
 
-    const logout = () => signOut(auth);
+    setPersistence(auth, browserLocalPersistence)
+      .then(() => {
+        const unsubscribe = onAuthStateChanged(auth, (user) => {
+          setCurrentUser(user);
+          setLoading(false);
+        });
+        return unsubscribe;
+      })
+      .catch((error) => {
+        console.error("Auth persistence error:", error);
+        setLoading(false);
+      });
+  }, []);
 
-    return (
-        <AuthContext.Provider value={{ currentUser, loading, logout }}>
-            {!loading && children}
-        </AuthContext.Provider>
-    );
+  const logout = () => auth ? signOut(auth) : Promise.resolve();
+
+  return (
+    <AuthContext.Provider value={{ currentUser, loading, logout }}>
+      {!loading && children}
+    </AuthContext.Provider>
+  );
 }
 
-// Hook
 export function useAuth() {
-    return useContext(AuthContext);
+  return useContext(AuthContext);
 }

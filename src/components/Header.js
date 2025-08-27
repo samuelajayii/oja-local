@@ -19,8 +19,8 @@ const Header = () => {
 
     const handleLogout = async () => {
         try {
-            await logout()
             router.push('/login')
+            await logout()
         } catch (error) {
             console.error('Logout failed:', error)
         }
@@ -29,7 +29,7 @@ const Header = () => {
     return (
         <header>
 
-            <nav className="flex flex-row justify-between items-center fixed top-0 right-0 left-0 py-4 px-8 text-white backdrop-blur-[10.2px]">
+            <nav className="flex z-1 flex-row justify-between items-center fixed top-0 right-0 left-0 py-4 px-8 text-white backdrop-blur-[10.2px]">
                 <Link href="/">
                     <div>
                         <img src="/logo.png" alt="Logo" className="h-14 w-14" />

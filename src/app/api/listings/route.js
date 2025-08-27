@@ -70,12 +70,13 @@ export async function POST(request) {
 
         const data = await request.json();
 
-        // Ensure user exists in database
+        // Ensure user exists in PostgreSQL database (fallback creation if needed)
         let dbUser = await db.user.findUnique({
             where: { id: user.uid }
         });
 
         if (!dbUser) {
+            console.log('User not found in PostgreSQL, creating...');
             dbUser = await db.user.create({
                 data: {
                     id: user.uid,

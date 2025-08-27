@@ -3,21 +3,32 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  DRAFT
 }
 
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
   name      String?
+  avatar    String?
+  bio       String?
+  location  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
   // Relations
-  listings  Listing[]
-  messages  Message[]
+  listings        Listing[]
+  sentMessages    Message[] @relation("SentMessages")
+  receivedMessages Message[] @relation("ReceivedMessages")
+  favorites       Favorite[]
   
   @@map("users")
 }
@@ -32,14 +43,15 @@ model Category {
 }
 
 model Listing {
-  id          String   @id @default(cuid())
+  id          String        @id @default(cuid())
   title       String
   description String
   price       Decimal?
-  images      String[]
+  images      String[] // URLs to uploaded images
+  location    String?
   status      ListingStatus @default(ACTIVE)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   
   // Relations
   userId     String
@@ -47,26 +59,42 @@ model Listing {
   categoryId String
   category   Category @relation(fields: [categoryId], references: [id])
   messages   Message[]
+  favorites  Favorite[]
   
+  @@index([status, createdAt])
+  @@index([categoryId])
+  @@index([userId])
   @@map("listings")
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  listingId String
+  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, listingId])
+  @@map("favorites")
 }
 
 model Message {
   id        String   @id @default(cuid())
   content   String
+  isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
   
   // Relations
-  senderId  String
-  sender    User     @relation(fields: [senderId], references: [id], onDelete: Cascade)
-  listingId String
-  listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  senderId   String
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiverId String
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  listingId  String
+  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   
+  @@index([receiverId, isRead])
+  @@index([listingId])
   @@map("messages")
-}
-
-enum ListingStatus {
-  ACTIVE
-  SOLD
-  DRAFT
 }

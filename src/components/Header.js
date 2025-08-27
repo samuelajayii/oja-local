@@ -10,12 +10,16 @@ import { useRouter } from 'next/navigation'
 import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger, navigationMenuTriggerStyle } from "@/components/ui/navigation-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { getInitials } from '@/app/lib/utils'
+import { useParams } from 'next/navigation'
+
 
 const Header = () => {
     const { currentUser, logout } = useAuth()
     const router = useRouter()
 
-
+    const { id } = useParams()
+    const { currentUser: user } = useAuth()
+    console.log('Current User ID:', user ? user.uid : 'No user logged in')
 
     const handleLogout = async () => {
         try {
@@ -88,18 +92,6 @@ const Header = () => {
                     </NavigationMenuList>
                 </NavigationMenu>
 
-                {/* Search */}
-                <div>
-                    <div className="flex items-center justify-center gap-2 outline-none py-3 w-[20vw] lg:w-[20vw] px-3 text-black rounded-lg h-full bg-white">
-                        <FontAwesomeIcon icon={faMagnifyingGlass} className="h-5" />
-                        <input
-                            type="text"
-                            placeholder="Search"
-                            className="w-full outline-none h-full"
-                        />
-                    </div>
-                </div>
-
                 {/* Auth buttons */}
                 <div className="flex items-center gap-3">
                     {currentUser ? (
@@ -114,7 +106,9 @@ const Header = () => {
                                 <DropdownMenuContent className="w-48 text-white mt-2 rounded-xl shadow-lg">
                                     <DropdownMenuLabel className="text-sm">My Account</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
-                                    <DropdownMenuItem>Profile</DropdownMenuItem>
+                                    <Link href={`/users/${currentUser.uid}`}>
+                                        <DropdownMenuItem>Profile</DropdownMenuItem>
+                                    </Link>
                                     <DropdownMenuItem>Billing</DropdownMenuItem>
                                     <DropdownMenuItem>Team</DropdownMenuItem>
                                     <DropdownMenuItem>Subscription</DropdownMenuItem>

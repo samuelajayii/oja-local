@@ -9,7 +9,7 @@ import { useAuth } from '../app/context/AuthContext'
 import { useRouter } from 'next/navigation'
 import { NavigationMenu, NavigationMenuContent, NavigationMenuItem, NavigationMenuLink, NavigationMenuList, NavigationMenuTrigger, navigationMenuTriggerStyle } from "@/components/ui/navigation-menu"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { getInitials } from '@/lib/utils'
+import { getInitials } from '@/app/lib/utils'
 
 const Header = () => {
     const { currentUser, logout } = useAuth()
@@ -20,7 +20,7 @@ const Header = () => {
     const handleLogout = async () => {
         try {
             await logout()
-            router.push('/')
+            router.push('/login')
         } catch (error) {
             console.error('Logout failed:', error)
         }
@@ -46,7 +46,7 @@ const Header = () => {
                         </NavigationMenuItem>
                         <NavigationMenuItem>
                             <NavigationMenuLink asChild className={navigationMenuTriggerStyle()}>
-                                <Link href="/docs">Post Item</Link>
+                                <Link href="/listings/create">Post Item</Link>
                             </NavigationMenuLink>
                         </NavigationMenuItem>
 
@@ -69,6 +69,9 @@ const Header = () => {
                                         </NavigationMenuLink>
                                         <NavigationMenuLink asChild>
                                             <Link href="#">Furniture</Link>
+                                        </NavigationMenuLink>
+                                        <NavigationMenuLink asChild>
+                                            <Link href="#">Home & Garden</Link>
                                         </NavigationMenuLink>
                                         <NavigationMenuLink asChild>
                                             <Link href="#">Other</Link>

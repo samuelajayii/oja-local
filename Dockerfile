@@ -25,6 +25,7 @@ ARG DIRECT_URL
 ARG FIREBASE_CLIENT_EMAIL
 ARG FIREBASE_PRIVATE_KEY
 ARG GOOGLE_CLOUD_STORAGE_BUCKET
+ARG CLOUD_SQL_CONNECTION_NAME
 
 # Set environment variables for build
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
@@ -52,10 +53,11 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-# Install Cloud SQL Proxy
+# Install Cloud SQL Proxy v2 (latest version)
 RUN apk add --no-cache curl && \
-    curl -o /cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 && \
-    chmod +x /cloud_sql_proxy
+    curl -o /cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.12.0/cloud-sql-proxy.linux.amd64 && \
+    chmod +x /cloud-sql-proxy && \
+    mv /cloud-sql-proxy /usr/local/bin/
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs

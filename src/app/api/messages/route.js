@@ -67,22 +67,12 @@ export async function GET(request) {
 
             if (!groupedConversations[key]) {
                 groupedConversations[key] = {
-                    id: key, // Add an id for the conversation
                     listingId: message.listingId,
                     listing: message.listing,
                     partner: message.senderId === user.uid ? message.receiver : message.sender,
-                    // Add withUser property that matches what the frontend expects
-                    withUser: message.senderId === user.uid ? message.receiver : message.sender,
                     lastMessage: message,
-                    unreadCount: 0,
-                    updatedAt: message.createdAt // Add updatedAt for sorting
+                    unreadCount: 0
                 };
-            } else {
-                // Update with the latest message if this one is more recent
-                if (message.createdAt > groupedConversations[key].lastMessage.createdAt) {
-                    groupedConversations[key].lastMessage = message;
-                    groupedConversations[key].updatedAt = message.createdAt;
-                }
             }
 
             if (message.receiverId === user.uid && !message.isRead) {
@@ -90,12 +80,7 @@ export async function GET(request) {
             }
         });
 
-        // Sort conversations by most recent message
-        const sortedConversations = Object.values(groupedConversations).sort((a, b) =>
-            new Date(b.updatedAt) - new Date(a.updatedAt)
-        );
-
-        return NextResponse.json(sortedConversations);
+        return NextResponse.json(Object.values(groupedConversations));
     } catch (error) {
         console.error('Database error:', error);
         return NextResponse.json({ error: 'Failed to fetch messages' }, { status: 500 });

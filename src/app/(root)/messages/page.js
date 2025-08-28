@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 /* eslint-disable @next/next/no-img-element */
 'use client'
 
@@ -253,8 +254,8 @@ export default function MessagesPage() {
                   className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
                 >
                   <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${isOwn
-                    ? 'bg-[#00154B] text-white'
-                    : 'bg-gray-700 text-white'
+                      ? 'bg-[#00154B] text-white'
+                      : 'bg-gray-700 text-white'
                     }`}>
                     <p className="text-sm">{message.content}</p>
                     <p className={`text-xs mt-1 ${isOwn ? 'text-blue-200' : 'text-gray-400'
@@ -293,7 +294,7 @@ export default function MessagesPage() {
                 <Send className="w-5 h-5" />
               )}
             </button>
-          </form>
+            </form>
         </div>
       </div>
     </div>

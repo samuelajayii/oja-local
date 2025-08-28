@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 
 const storage = new Storage({
     projectId: 'oja-local-46990',
-    keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS_STORAGE,
+    // keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS_STORAGE,
 });
 
 const bucket = storage.bucket(process.env.GOOGLE_CLOUD_STORAGE_BUCKET);

@@ -8,7 +8,7 @@ if [ -n "$CLOUD_SQL_CONNECTION_NAME" ]; then
     echo "Starting Cloud SQL Proxy for connection: $CLOUD_SQL_CONNECTION_NAME"
     
     # Start Cloud SQL Proxy v2 in the background
-    cloud-sql-proxy --port 5432 "$CLOUD_SQL_CONNECTION_NAME" &
+    cloud-sql-proxy --port 5432 oja-local-46990:europe-west1:marketplace-db &
     
     # Store the proxy PID
     PROXY_PID=$!

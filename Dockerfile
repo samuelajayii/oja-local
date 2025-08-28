@@ -46,7 +46,7 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=8080
+ENV PORT=3000
 
 # non-root user
 RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
@@ -63,5 +63,5 @@ COPY start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 USER nextjs
-EXPOSE 8080
+EXPOSE 3000
 CMD ["./start.sh"]

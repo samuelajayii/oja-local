@@ -51,6 +51,12 @@ ENV NODE_ENV=production
 ENV PORT=8080
 ENV HOSTNAME=0.0.0.0
 
+# Install Cloud SQL Proxy
+RUN apk add --no-cache curl
+RUN curl -o cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.8.0/cloud-sql-proxy.linux.amd64 \
+    && chmod +x cloud-sql-proxy \
+    && mv cloud-sql-proxy /usr/local/bin/
+
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
@@ -60,8 +66,22 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
+# Create startup script
+RUN echo '#!/bin/sh\n\
+# Start Cloud SQL Proxy in background\n\
+cloud-sql-proxy --port 5432 oja-local-46990:europe-west1:marketplace-db &\n\
+\n\
+# Wait a moment for proxy to start\n\
+sleep 5\n\
+\n\
+# Start the Next.js application\n\
+exec node server.js' > /usr/local/bin/start.sh
+
+RUN chmod +x /usr/local/bin/start.sh
+RUN chown nextjs:nodejs /usr/local/bin/start.sh
+
 USER nextjs
 
 EXPOSE 8080
 
-CMD ["node", "server.js"]
+CMD ["/usr/local/bin/start.sh"]

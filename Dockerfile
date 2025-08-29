@@ -37,8 +37,8 @@ ENV NEXT_PUBLIC_APP_ID=${NEXT_PUBLIC_APP_ID}
 COPY . .
 
 # Generate Prisma client and build the app
-RUN npm run build
 RUN npx prisma generate
+RUN npm run build
 
 # ---- Production runner ----
 FROM node:20-alpine AS runner

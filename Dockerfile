@@ -5,7 +5,7 @@ COPY package*.json ./
 
 # ---- Install dependencies ----
 FROM base AS deps
-RUN npm install --frozen-lockfile
+RUN npm ci --only=production --frozen-lockfile
 
 # ---- Build the Next.js app ----
 FROM base AS builder
@@ -32,7 +32,6 @@ ENV NEXT_PUBLIC_STORAGE_BUCKET=${NEXT_PUBLIC_STORAGE_BUCKET}
 ENV NEXT_PUBLIC_MESSAGING_SENDER_ID=${NEXT_PUBLIC_MESSAGING_SENDER_ID}
 ENV NEXT_PUBLIC_APP_ID=${NEXT_PUBLIC_APP_ID}
 
-
 # Copy source code and build
 COPY . .
 
@@ -46,6 +45,7 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV HOSTNAME=0.0.0.0
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -53,17 +53,16 @@ RUN adduser --system --uid 1001 nextjs
 
 # Copy necessary files from builder
 COPY --from=builder /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder /app/prisma ./prisma
 
-# Copy startup script
-COPY --from=builder /app/start.sh ./start.sh
-RUN chmod +x ./start.sh
+# Make sure the nextjs user owns everything
+RUN chown -R nextjs:nodejs /app
 
 USER nextjs
 
 EXPOSE 8080
 
-CMD ["./start.sh"]
+# Use the standalone server for better performance
+CMD ["node", "server.js"]

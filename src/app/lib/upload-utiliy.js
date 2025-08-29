@@ -1,3 +1,7 @@
+'use client';
+
+import { useState, useMemo } from 'react';
+
 // Upload utility with fallback mechanisms
 export class FileUploader {
   constructor(baseUrl = '') {

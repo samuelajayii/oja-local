@@ -20,8 +20,6 @@ ARG NEXT_PUBLIC_MESSAGING_SENDER_ID
 ARG NEXT_PUBLIC_APP_ID
 
 # Runtime environment variables for server-side
-ARG DATABASE_URL
-ARG DIRECT_URL
 ARG FIREBASE_CLIENT_EMAIL
 ARG FIREBASE_PRIVATE_KEY
 ARG GOOGLE_CLOUD_STORAGE_BUCKET
@@ -34,16 +32,13 @@ ENV NEXT_PUBLIC_STORAGE_BUCKET=${NEXT_PUBLIC_STORAGE_BUCKET}
 ENV NEXT_PUBLIC_MESSAGING_SENDER_ID=${NEXT_PUBLIC_MESSAGING_SENDER_ID}
 ENV NEXT_PUBLIC_APP_ID=${NEXT_PUBLIC_APP_ID}
 
-# Set database URLs for Prisma
-ENV DATABASE_URL=${DATABASE_URL}
-ENV DIRECT_URL=${DIRECT_URL}
 
 # Copy source code and build
 COPY . .
 
 # Generate Prisma client and build the app
-RUN npx prisma generate
 RUN npm run build
+RUN npx prisma generate
 
 # ---- Production runner ----
 FROM node:20-alpine AS runner
@@ -51,11 +46,6 @@ WORKDIR /app
 
 ENV NODE_ENV=production
 ENV PORT=8080
-
-# Install Cloud SQL Proxy
-RUN apk add --no-cache curl && \
-  curl -o /cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 && \
-  chmod +x /cloud_sql_proxy
 
 # Create non-root user
 RUN addgroup --system --gid 1001 nodejs
@@ -76,5 +66,4 @@ USER nextjs
 
 EXPOSE 8080
 
-# Use startup script that handles Cloud SQL Proxy
-CMD ["npm", "start"]
+CMD ["./start.sh"]

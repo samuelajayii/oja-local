@@ -2,10 +2,24 @@
 
 import { useState, useMemo } from 'react';
 
-// Upload utility with fallback mechanisms
+// Upload utility with fallback mechanisms and authentication
 export class FileUploader {
-  constructor(baseUrl = '') {
+  constructor(baseUrl = '', getAuthHeaders = null) {
     this.baseUrl = baseUrl;
+    this.getAuthHeaders = getAuthHeaders;
+  }
+
+  async getAuthenticatedHeaders() {
+    const headers = {
+      'Content-Type': 'application/json',
+    };
+
+    if (this.getAuthHeaders) {
+      const authHeaders = await this.getAuthHeaders();
+      Object.assign(headers, authHeaders);
+    }
+
+    return headers;
   }
 
   async uploadFile(file, onProgress = null) {
@@ -24,12 +38,12 @@ export class FileUploader {
   }
 
   async trySignedUrlUpload(file, onProgress) {
-    // Step 1: Get signed URL
+    // Step 1: Get signed URL with authentication
+    const headers = await this.getAuthenticatedHeaders();
+    
     const urlResponse = await fetch(`${this.baseUrl}/api/upload-url`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         filename: file.name,
         contentType: file.type
@@ -74,7 +88,7 @@ export class FileUploader {
 
     const xhr = new XMLHttpRequest();
 
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       xhr.upload.addEventListener('progress', (e) => {
         if (e.lengthComputable && onProgress) {
           const percentComplete = (e.loaded / e.total) * 100;
@@ -105,18 +119,52 @@ export class FileUploader {
       });
 
       xhr.open('POST', `${this.baseUrl}/api/upload-url`);
+      
+      // Add authentication headers for direct upload
+      if (this.getAuthHeaders) {
+        try {
+          const authHeaders = await this.getAuthHeaders();
+          Object.keys(authHeaders).forEach(key => {
+            if (key !== 'Content-Type') { // Don't override Content-Type for FormData
+              xhr.setRequestHeader(key, authHeaders[key]);
+            }
+          });
+        } catch (error) {
+          console.warn('Failed to get auth headers:', error);
+        }
+      }
+      
       xhr.send(formData);
     });
   }
 }
 
-// React hook for file uploads
+// React hook for file uploads with authentication
 export function useFileUpload() {
   const [uploading, setUploading] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState(null);
 
-  const uploader = useMemo(() => new FileUploader(), []);
+  const uploader = useMemo(() => {
+    // Function to get authentication headers
+    const getAuthHeaders = async () => {
+      // Get the Firebase auth token
+      const { getAuth } = await import('firebase/auth');
+      const auth = getAuth();
+      const user = auth.currentUser;
+      
+      if (user) {
+        const token = await user.getIdToken();
+        return {
+          'Authorization': `Bearer ${token}`
+        };
+      }
+      
+      return {};
+    };
+
+    return new FileUploader('', getAuthHeaders);
+  }, []);
 
   const uploadFile = async (file) => {
     setUploading(true);
@@ -147,15 +195,45 @@ export function useFileUpload() {
   };
 }
 
-// Simple function-based approach
+// Simple function-based approach with authentication
 export async function uploadFileSimple(file, onProgress = null) {
-  const uploader = new FileUploader();
+  const getAuthHeaders = async () => {
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (user) {
+      const token = await user.getIdToken();
+      return {
+        'Authorization': `Bearer ${token}`
+      };
+    }
+    
+    return {};
+  };
+
+  const uploader = new FileUploader('', getAuthHeaders);
   return await uploader.uploadFile(file, onProgress);
 }
 
-// Batch upload utility
+// Batch upload utility with authentication
 export async function uploadMultipleFiles(files, onProgress = null) {
-  const uploader = new FileUploader();
+  const getAuthHeaders = async () => {
+    const { getAuth } = await import('firebase/auth');
+    const auth = getAuth();
+    const user = auth.currentUser;
+    
+    if (user) {
+      const token = await user.getIdToken();
+      return {
+        'Authorization': `Bearer ${token}`
+      };
+    }
+    
+    return {};
+  };
+
+  const uploader = new FileUploader('', getAuthHeaders);
   const results = [];
 
   for (let i = 0; i < files.length; i++) {

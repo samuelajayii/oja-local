@@ -1,4 +1,3 @@
-# Dockerfile (Cloud Run friendly)
 # ---- Base Node image ----
 FROM node:20-alpine AS base
 WORKDIR /app
@@ -6,13 +5,13 @@ COPY package*.json ./
 
 # ---- Install dependencies ----
 FROM base AS deps
-RUN npm ci --silent
+RUN npm install --frozen-lockfile
 
 # ---- Build the Next.js app ----
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 
-# Build args (public NEXT_* for static build-time)
+# Build arguments for Next.js public environment variables
 ARG NEXT_PUBLIC_API_KEY
 ARG NEXT_PUBLIC_AUTH_DOMAIN
 ARG NEXT_PUBLIC_PROJECT_ID
@@ -20,15 +19,14 @@ ARG NEXT_PUBLIC_STORAGE_BUCKET
 ARG NEXT_PUBLIC_MESSAGING_SENDER_ID
 ARG NEXT_PUBLIC_APP_ID
 
-# Server runtime args (pass at deploy time - do NOT bake secrets in image)
+# Runtime environment variables for server-side
 ARG DATABASE_URL
 ARG DIRECT_URL
 ARG FIREBASE_CLIENT_EMAIL
 ARG FIREBASE_PRIVATE_KEY
 ARG GOOGLE_CLOUD_STORAGE_BUCKET
-ARG CLOUD_SQL_CONNECTION_NAME
 
-# Pass NEXT_PUBLIC envs to the build
+# Set environment variables for build
 ENV NEXT_PUBLIC_API_KEY=${NEXT_PUBLIC_API_KEY}
 ENV NEXT_PUBLIC_AUTH_DOMAIN=${NEXT_PUBLIC_AUTH_DOMAIN}
 ENV NEXT_PUBLIC_PROJECT_ID=${NEXT_PUBLIC_PROJECT_ID}
@@ -36,9 +34,15 @@ ENV NEXT_PUBLIC_STORAGE_BUCKET=${NEXT_PUBLIC_STORAGE_BUCKET}
 ENV NEXT_PUBLIC_MESSAGING_SENDER_ID=${NEXT_PUBLIC_MESSAGING_SENDER_ID}
 ENV NEXT_PUBLIC_APP_ID=${NEXT_PUBLIC_APP_ID}
 
-# Copy code & build
+# Set database URLs for Prisma
+ENV DATABASE_URL=${DATABASE_URL}
+ENV DIRECT_URL=${DIRECT_URL}
+
+# Copy source code and build
 COPY . .
-RUN npx prisma generate --schema=./prisma/schema.prisma
+
+# Generate Prisma client and build the app
+RUN npx prisma generate
 RUN npm run build
 
 # ---- Production runner ----
@@ -46,22 +50,31 @@ FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
-ENV PORT=3000
+ENV PORT=8080
 
-# non-root user
-RUN addgroup -S nodejs && adduser -S nextjs -G nodejs
+# Install Cloud SQL Proxy
+RUN apk add --no-cache curl && \
+  curl -o /cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.linux.amd64 && \
+  chmod +x /cloud_sql_proxy
 
-# Copy built files
-COPY --from=builder /app/.next ./.next
+# Create non-root user
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+# Copy necessary files from builder
 COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./package.json
 COPY --from=builder /app/prisma ./prisma
 
-# entrypoint
-COPY start.sh ./start.sh
+# Copy startup script
+COPY --from=builder /app/start.sh ./start.sh
 RUN chmod +x ./start.sh
 
 USER nextjs
-EXPOSE 3000
-CMD ["./start.sh"]
+
+EXPOSE 8080
+
+# Use startup script that handles Cloud SQL Proxy
+CMD ["npm", "start"]

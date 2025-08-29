@@ -5,11 +5,15 @@ COPY package*.json ./
 
 # ---- Install dependencies ----
 FROM base AS deps
-RUN npm ci --only=production --frozen-lockfile
+RUN npm ci --only=production
+
+# Install dev dependencies for build
+FROM base AS dev-deps
+RUN npm ci
 
 # ---- Build the Next.js app ----
 FROM base AS builder
-COPY --from=deps /app/node_modules ./node_modules
+COPY --from=dev-deps /app/node_modules ./node_modules
 
 # Build arguments for Next.js public environment variables
 ARG NEXT_PUBLIC_API_KEY
@@ -51,18 +55,13 @@ ENV HOSTNAME=0.0.0.0
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
-# Copy necessary files from builder
+# Copy built application
 COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
-COPY --from=builder /app/prisma ./prisma
-
-# Make sure the nextjs user owns everything
-RUN chown -R nextjs:nodejs /app
 
 USER nextjs
 
 EXPOSE 8080
 
-# Use the standalone server for better performance
 CMD ["node", "server.js"]

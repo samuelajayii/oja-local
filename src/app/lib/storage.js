@@ -13,7 +13,7 @@ if (process.env.NODE_ENV === 'production') {
     // In development, you might need explicit credentials
     storage = new Storage({
         projectId: process.env.NEXT_PUBLIC_PROJECT_ID || 'oja-local-46990',
-        keyFilename: process.env.GOOGLE_APPLICATION_CREDENTIALS_STORAGE,
+        keyFilename: process.env.GOOGLE_CLOUD_STORAGE_CREDENTIALS,
     });
 }
 
@@ -24,42 +24,25 @@ export async function generateSignedUploadUrl(filename, contentType) {
         const uniqueFilename = `listings/${uuidv4()}-${filename}`;
         const file = bucket.file(uniqueFilename);
 
-        // For Cloud Run, we'll use a different approach that doesn't require signBlob permission
-        if (process.env.NODE_ENV === 'production') {
-            // Generate a simple upload URL using resumable upload
-            const [url] = await file.getSignedUrl({
-                version: 'v4',
-                action: 'write',
-                expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-                contentType,
-                extensionHeaders: {
-                    'x-goog-resumable': 'start'
-                }
-            });
+        // Use a more compatible approach for Cloud Run
+        const [url] = await file.getSignedUrl({
+            version: 'v4',
+            action: 'write',
+            expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+            contentType,
+            // Remove resumable upload for better compatibility
+        });
 
-            return {
-                uploadUrl: url,
-                publicUrl: `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`
-            };
-        } else {
-            // Development approach
-            const [url] = await file.getSignedUrl({
-                version: 'v4',
-                action: 'write',
-                expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-                contentType,
-            });
-
-            return {
-                uploadUrl: url,
-                publicUrl: `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`
-            };
-        }
+        return {
+            uploadUrl: url,
+            publicUrl: `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`,
+            filename: uniqueFilename
+        };
     } catch (error) {
         console.error('Error generating signed URL:', error);
         
-        // Fallback: return a direct upload endpoint that your app can handle
-        throw new Error('Failed to generate upload URL: ' + error.message);
+        // Fallback to direct upload through your API
+        return null;
     }
 }
 
@@ -86,7 +69,7 @@ export async function deleteImage(imageUrl) {
     }
 }
 
-// Alternative direct upload function for when signed URLs fail
+// Direct upload function for when signed URLs fail
 export async function directUpload(buffer, filename, contentType) {
     try {
         const uniqueFilename = `listings/${uuidv4()}-${filename}`;
@@ -100,10 +83,40 @@ export async function directUpload(buffer, filename, contentType) {
         });
 
         return {
-            publicUrl: `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`
+            publicUrl: `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`,
+            filename: uniqueFilename
         };
     } catch (error) {
         console.error('Direct upload error:', error);
         throw error;
+    }
+}
+
+// New function to handle file uploads directly through the API
+export async function uploadFileBuffer(fileBuffer, originalFilename, contentType) {
+    try {
+        const uniqueFilename = `listings/${uuidv4()}-${originalFilename}`;
+        const file = bucket.file(uniqueFilename);
+        
+        // Upload with proper metadata and make it publicly accessible
+        await file.save(fileBuffer, {
+            metadata: {
+                contentType,
+                cacheControl: 'public, max-age=3600',
+            },
+            public: true,
+            validation: 'md5'
+        });
+
+        // Get the public URL
+        const publicUrl = `https://storage.googleapis.com/${process.env.GOOGLE_CLOUD_STORAGE_BUCKET}/${uniqueFilename}`;
+        
+        return {
+            publicUrl,
+            filename: uniqueFilename
+        };
+    } catch (error) {
+        console.error('File upload error:', error);
+        throw new Error(`Upload failed: ${error.message}`);
     }
 }

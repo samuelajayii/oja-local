@@ -2,7 +2,7 @@
   {
     "origin": [
       "http://localhost:3000",
-      "https://your-domain.com"
+      "https://oja-local-790874300827.europe-west1.run.app"
     ],
     "method": [
       "GET",

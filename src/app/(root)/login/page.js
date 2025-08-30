@@ -235,17 +235,21 @@ export default function SignIn() {
                 />
               </div>
 
-              <button type="submit" disabled={loading}>
-                <div className="bg-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-[#00296B] transition-all border border-white duration-300 cursor-pointer lg:w-[300px] disabled:opacity-50">
-                  {loading ? "Logging in..." : "Log in"}
-                </div>
-              </button>
+              <div className="flex flex-col gap-4 w-full">
+                <button type="submit" disabled={loading}>
+                  <div className="bg-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-[#00296B] transition-all border border-white duration-300 cursor-pointer w-full lg:w-[300px] disabled:opacity-50">
+                    {loading ? "Logging in..." : "Log in"}
+                  </div>
+                </button>
 
-              <button type="button" onClick={handleGoogleSignIn} disabled={loading}>
-                <div className="bg-white text-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-gray-100 transition-all border border-[#00154B]/20 duration-300 cursor-pointer lg:w-[300px] disabled:opacity-50">
-                  {loading ? "Signing in..." : "Log in with Google"}
-                </div>
-              </button>
+                <button type="button" onClick={handleGoogleSignIn} disabled={loading}>
+                  <div className="bg-white text-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-gray-100 transition-all border border-[#00154B]/20 duration-300 cursor-pointer lg:w-[300px] disabled:opacity-50">
+                    {loading ? "Signing in..." : "Log in with Google"}
+                  </div>
+                </button>
+              </div>
+
+
             </form>
 
             <h1 onClick={() => { setToggleForm(!toggleForm) }} className="underline self-start cursor-pointer mt-4">
@@ -260,72 +264,78 @@ export default function SignIn() {
           <img src="cart.png" className="h-20 w-24" />
 
           <div className="px-5 py-7">
-            <form className="grid grid-cols-2 gap-5 w-full h-full" onSubmit={handleSignUp}>
+            <form className="flex flex-col gap-4" onSubmit={handleSignUp}>
               {error && (
                 <div className="text-red-400 text-sm text-center col-span-2">
                   {error}
                 </div>
               )}
 
-              <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full">
-                <FontAwesomeIcon icon={faPerson} />
-                <input
-                  onChange={handleFirstNameChange}
-                  value={firstName}
-                  type="text"
-                  placeholder="FIRST NAME"
-                  className="placeholder:text-gray-400 outline-none w-full bg-transparent"
-                  required
-                />
-              </div>
-
-              <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full">
-                <FontAwesomeIcon icon={faPerson} />
-                <input
-                  onChange={handleLastNameChange}
-                  value={lastName}
-                  type="text"
-                  placeholder="LAST NAME"
-                  className="placeholder:text-gray-400 outline-none w-full bg-transparent"
-                  required
-                />
-              </div>
-
-              <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full col-span-2">
-                <FontAwesomeIcon icon={faEnvelope} />
-                <input
-                  onChange={handleEmailChange}
-                  value={email}
-                  type="email"
-                  placeholder="EMAIL"
-                  className="placeholder:text-gray-400 outline-none w-full bg-transparent"
-                  required
-                />
-              </div>
-
-              <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full col-span-2">
-                <FontAwesomeIcon icon={faLock} />
-                <input
-                  onChange={handlePasswordChange}
-                  value={password}
-                  type="password"
-                  placeholder="PASSWORD"
-                  className="placeholder:text-gray-400 outline-none w-full bg-transparent"
-                  required
-                />
-              </div>
-
-              <button type="submit" className="col-span-2" disabled={loading}>
-                <div className="bg-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-[#00296B] transition-all border border-white duration-300 cursor-pointer w-full text-center disabled:opacity-50">
-                  {loading ? "Signing up..." : "Sign Up"}
+              <div className="lg:grid flex flex-col lg:grid-cols-2 gap-5 w-full h-full">
+                <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full">
+                  <FontAwesomeIcon icon={faPerson} />
+                  <input
+                    onChange={handleFirstNameChange}
+                    value={firstName}
+                    type="text"
+                    placeholder="FIRST NAME"
+                    className="placeholder:text-gray-400 outline-none w-full bg-transparent"
+                    required
+                  />
                 </div>
-              </button>
 
-              <button type="button" onClick={handleGoogleSignIn} className="col-span-2" disabled={loading}>
-                <div className="bg-white text-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-gray-100 transition-all border border-[#00154B]/20 duration-300 cursor-pointer w-full text-center disabled:opacity-50">
-                  {loading ? "Signing up..." : "Sign Up with Google"}
+                <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full">
+                  <FontAwesomeIcon icon={faPerson} />
+                  <input
+                    onChange={handleLastNameChange}
+                    value={lastName}
+                    type="text"
+                    placeholder="LAST NAME"
+                    className="placeholder:text-gray-400 outline-none w-full bg-transparent"
+                    required
+                  />
                 </div>
-              </button>
+
+                <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full col-span-2">
+                  <FontAwesomeIcon icon={faEnvelope} />
+                  <input
+                    onChange={handleEmailChange}
+                    value={email}
+                    type="email"
+                    placeholder="EMAIL"
+                    className="placeholder:text-gray-400 outline-none w-full bg-transparent"
+                    required
+                  />
+                </div>
+
+                <div className="border border-white rounded-sm px-4 py-3 flex flex-row items-center gap-4 w-full col-span-2">
+                  <FontAwesomeIcon icon={faLock} />
+                  <input
+                    onChange={handlePasswordChange}
+                    value={password}
+                    type="password"
+                    placeholder="PASSWORD"
+                    className="placeholder:text-gray-400 outline-none w-full bg-transparent"
+                    required
+                  />
+                </div>
+              </div>
+
+
+              <div className="flex flex-col gap-4 w-full">
+                <button type="submit" className="col-span-2" disabled={loading}>
+                  <div className="bg-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-[#00296B] transition-all border border-white duration-300 cursor-pointer w-full text-center disabled:opacity-50">
+                    {loading ? "Signing up..." : "Sign Up"}
+                  </div>
+                </button>
+
+                <button type="button" onClick={handleGoogleSignIn} className="col-span-2" disabled={loading}>
+                  <div className="bg-white text-[#00154B] font-medium rounded-sm px-6 py-2 hover:bg-gray-100 transition-all border border-[#00154B]/20 duration-300 cursor-pointer w-full text-center disabled:opacity-50">
+                    {loading ? "Signing up..." : "Sign Up with Google"}
+                  </div>
+                </button>
+              </div>
+
             </form>
 
             <h1 onClick={() => { setToggleForm(!toggleForm) }} className="underline self-start cursor-pointer mt-2">

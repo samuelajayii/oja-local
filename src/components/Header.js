@@ -94,8 +94,8 @@ const Header = () => {
         <div className="md:hidden fixed top-16 left-0 right-0 bg-[#00154B] text-white flex flex-col gap-4 p-6 z-20">
           <Link href="/listings" onClick={() => setMenuOpen(false)}>Browse Listings</Link>
           <Link href="/listings/create" onClick={() => setMenuOpen(false)}>Post Item</Link>
-          <Link href="#" onClick={() => setMenuOpen(false)}>Categories</Link>
-          <Link href="/docs" onClick={() => setMenuOpen(false)}>How It Works</Link>
+          <Link href="/" onClick={() => setMenuOpen(false)}>Categories</Link>
+          <Link href="/" onClick={() => setMenuOpen(false)}>How It Works</Link>
           <Link href={`/users/${user?.uid}?tab=messages`} onClick={() => setMenuOpen(false)}>Messaging</Link>
           {!currentUser && (
             <Link

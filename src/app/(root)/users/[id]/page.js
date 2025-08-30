@@ -176,7 +176,7 @@ export default function UserDashboard() {
 	if (!user) {
 		return (
 			<div className="min-h-screen bg-[#000814] flex items-center justify-center text-white">
-				<div className="text-center">
+				<div className="text-center px-4">
 					<h2 className="text-2xl font-bold mb-4">Please sign in to access your dashboard</h2>
 					<Link
 						href="login"
@@ -191,16 +191,16 @@ export default function UserDashboard() {
 
 	return (
 		<div className="min-h-screen mt-32 bg-[#000814] text-white">
-			<div className="max-w-7xl mx-auto px-4 py-8">
+			<div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 				{/* Header */}
-				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8">
+				<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-8 gap-4">
 					<div>
 						<h1 className="text-3xl font-bold">Dashboard</h1>
 						<p className="text-gray-300 mt-1">Manage your listings and account</p>
 					</div>
 					<Link
 						href="/listings/create"
-						className="mt-4 sm:mt-0 bg-[#00154B] text-white px-6 py-3 rounded-lg hover:bg-[#00296B] inline-flex items-center"
+						className="mt-4 sm:mt-0 bg-[#00154B] text-white px-6 py-3 rounded-lg hover:bg-[#00296B] inline-flex items-center justify-center w-full sm:w-auto"
 					>
 						<Plus className="w-4 h-4 mr-2" />
 						Create Listing
@@ -210,7 +210,7 @@ export default function UserDashboard() {
 				{/* Navigation Tabs */}
 				<div className="bg-[#000814] rounded-lg shadow-sm border border-gray-700 mb-8">
 					<div className="border-b border-gray-700">
-						<nav className="flex space-x-8 px-6">
+						<nav className="flex space-x-8 px-4 sm:px-6 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700">
 							{[
 								{ id: 'listings', name: 'My Listings', icon: Plus },
 								{ id: 'favorites', name: 'Favorites', icon: Heart },
@@ -220,37 +220,37 @@ export default function UserDashboard() {
 								<button
 									key={tab.id}
 									onClick={() => setActiveTab(tab.id)}
-									className={`py-4 px-1 border-b-2 font-medium text-sm flex items-center ${activeTab === tab.id
-										? 'border-[#00154B] text-white'
+									className={`py-4 px-1 min-w-[120px] text-center justify-center border-b-2 font-medium text-sm flex items-center whitespace-nowrap ${activeTab === tab.id
+										? 'border-white text-white'
 										: 'border-transparent text-gray-400 hover:text-gray-200 hover:border-gray-600'
 										}`}
 								>
-									<tab.icon className="w-4 h-4 mr-2" />
-									{tab.name}
+									<tab.icon className="w-4 h-4 mr-2 flex-shrink-0" />
+									<span className="truncate">{tab.name}</span>
 								</button>
 							))}
 						</nav>
 					</div>
 
 					{/* Tab Content */}
-					<div className="p-6">
+					<div className="p-4 sm:p-6">
 						{loading ? (
 							<div className="flex items-center justify-center py-12">
-								<div className="animate-spin rounded-full h-32 w-32 border-b-2 border-[#00154B]"></div>
+								<div className="animate-spin rounded-full h-16 w-16 sm:h-32 sm:w-32 border-b-2 border-[#00154B]"></div>
 							</div>
 						) : (
 							<>
 								{/* My Listings Tab */}
 								{activeTab === 'listings' && (
 									<div>
-										<div className="flex items-center justify-between mb-6">
+										<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
 											<h2 className="text-xl font-semibold">
 												My Listings ({userListings.length})
 											</h2>
 										</div>
 
 										{userListings.length === 0 ? (
-											<div className="text-center py-12">
+											<div className="text-center py-12 px-4">
 												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
 													<Plus className="w-12 h-12 text-gray-300" />
 												</div>
@@ -264,17 +264,17 @@ export default function UserDashboard() {
 												</Link>
 											</div>
 										) : (
-											<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+											<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 												{userListings.map((listing) => (
 													<div key={listing.id} className="bg-[#000814] rounded-lg border border-gray-700 overflow-hidden">
 														{listing.images && listing.images.length > 0 ? (
 															<img
 																src={listing.images[0]}
 																alt={listing.title}
-																className="w-full h-48 object-cover"
+																className="w-full h-40 sm:h-48 md:h-56 object-cover"
 															/>
 														) : (
-															<div className="w-full h-48 bg-gray-700 flex items-center justify-center">
+															<div className="w-full h-40 sm:h-48 md:h-56 bg-gray-700 flex items-center justify-center">
 																<span className="text-gray-300">No image</span>
 															</div>
 														)}
@@ -290,7 +290,7 @@ export default function UserDashboard() {
 																</div>
 															)}
 
-															<div className="flex items-center text-sm text-gray-300 mb-4 space-x-4">
+															<div className="flex items-center text-sm text-gray-300 mb-4 space-x-4 flex-wrap">
 																<span className="flex items-center">
 																	<MessageCircle className="w-4 h-4 mr-1" />
 																	{listing._count?.messages ?? 0} messages
@@ -301,7 +301,7 @@ export default function UserDashboard() {
 																</span>
 															</div>
 
-															<div className="flex items-center space-x-2">
+															<div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 space-y-2 sm:space-y-0">
 																<Link
 																	href={`/listings/${listing.id}`}
 																	className="flex-1 bg-transparent text-white border border-gray-600 px-3 py-2 rounded-lg hover:bg-[#00154B]/20 text-center text-sm font-medium flex items-center justify-center"
@@ -318,9 +318,10 @@ export default function UserDashboard() {
 																</Link>
 																<button
 																	onClick={() => deleteListing(listing.id)}
-																	className="bg-red-600 text-white p-2 rounded-lg hover:bg-red-700"
-																>
+																	className="bg-red-600 text-white flex items-center gap-1 justify-center p-2 rounded-lg hover:bg-red-700 w-full sm:w-auto"
+																>	
 																	<Trash2 className="w-4 h-4" />
+																	Delete
 																</button>
 															</div>
 														</div>
@@ -334,14 +335,14 @@ export default function UserDashboard() {
 								{/* Favorites Tab */}
 								{activeTab === 'favorites' && (
 									<div>
-										<div className="flex items-center justify-between mb-6">
+										<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
 											<h2 className="text-xl font-semibold">
 												Favorite Listings ({favorites.length})
 											</h2>
 										</div>
 
 										{favorites.length === 0 ? (
-											<div className="text-center py-12">
+											<div className="text-center py-12 px-4">
 												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
 													<Heart className="w-12 h-12 text-gray-300" />
 												</div>
@@ -355,13 +356,13 @@ export default function UserDashboard() {
 												</Link>
 											</div>
 										) : (
-											<div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+											<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
 												{favorites.map((listing) => (
 													<div key={listing.id} className="bg-[#000814] rounded-lg border border-gray-700 overflow-hidden">
 														{listing.images && listing.images.length > 0 ? (
-															<img src={listing.images[0]} alt={listing.title} className="w-full h-48 object-cover" />
+															<img src={listing.images[0]} alt={listing.title} className="w-full h-40 sm:h-48 md:h-56 object-cover" />
 														) : (
-															<div className="w-full h-48 bg-gray-700 flex items-center justify-center">
+															<div className="w-full h-40 sm:h-48 md:h-56 bg-gray-700 flex items-center justify-center">
 																<span className="text-gray-300">No image</span>
 															</div>
 														)}
@@ -370,7 +371,7 @@ export default function UserDashboard() {
 															<h3 className="font-semibold mb-2 truncate">{listing.title}</h3>
 															{listing.price && <div className="text-lg font-bold text-green-500 mb-2">${parseFloat(listing.price).toFixed(2)}</div>}
 
-															<div className="flex items-center space-x-2 mt-4">
+															<div className="flex flex-col sm:flex-row sm:items-center sm:space-x-2 mt-4 space-y-2 sm:space-y-0">
 																<Link
 																	href={`/listings/${listing.id}`}
 																	className="flex-1 bg-transparent text-white border border-gray-600 px-3 py-2 rounded-lg hover:bg-[#00154B]/20 text-center text-sm font-medium"
@@ -379,7 +380,7 @@ export default function UserDashboard() {
 																</Link>
 																<button
 																	onClick={() => removeFavorite(listing.id)}
-																	className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700"
+																	className="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700 w-full sm:w-auto"
 																>
 																	Remove
 																</button>
@@ -400,7 +401,7 @@ export default function UserDashboard() {
 										</div>
 
 										{conversations.length === 0 ? (
-											<div className="text-center py-12">
+											<div className="text-center py-12 px-4">
 												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
 													<MessageCircle className="w-12 h-12 text-gray-300" />
 												</div>
@@ -426,10 +427,10 @@ export default function UserDashboard() {
 																	<img
 																		src={conv.partner?.avatar || conv.withUser?.avatar}
 																		alt={conv.partner?.name || conv.withUser?.name}
-																		className="w-12 h-12 rounded-full object-cover"
+																		className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
 																	/>
 																) : (
-																	<div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
+																	<div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-700 rounded-full flex items-center justify-center">
 																		<User className="w-6 h-6 text-gray-300" />
 																	</div>
 																)}
@@ -469,7 +470,7 @@ export default function UserDashboard() {
 																			'No messages yet'
 																		)}
 																	</p>
-																	<span className="text-xs text-gray-500">
+																	<span className="text-xs text-gray-500 ml-2">
 																		{conv.lastMessage?.createdAt ? new Date(conv.lastMessage.createdAt).toLocaleTimeString('en-US', {
 																			hour: '2-digit',
 																			minute: '2-digit'
@@ -487,12 +488,12 @@ export default function UserDashboard() {
 
 								{/* Profile Tab */}
 								{activeTab === 'profile' && (
-									<div className="max-w-3xl mx-auto">
-										<div className="flex items-center space-x-6 mb-6">
+									<div className="max-w-3xl mx-auto px-2 sm:px-0">
+										<div className="flex flex-col sm:flex-row items-start sm:items-center space-x-0 sm:space-x-6 mb-6 gap-4">
 											{profile.avatar ? (
-												<img src={profile.avatar} alt={profile.name} className="w-24 h-24 rounded-full object-cover" />
+												<img src={profile.avatar} alt={profile.name} className="w-20 h-20 sm:w-24 sm:h-24 rounded-full object-cover" />
 											) : (
-												<div className="w-24 h-24 rounded-full bg-gray-700 flex items-center justify-center">
+												<div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-700 flex items-center justify-center">
 													<User className="w-8 h-8 text-gray-300" />
 												</div>
 											)}
@@ -558,18 +559,18 @@ export default function UserDashboard() {
 													/>
 												</div>
 
-												<div className="flex items-center space-x-2">
+												<div className="flex flex-col sm:flex-row items-center sm:space-x-2 space-y-2 sm:space-y-0">
 													<button
 														type="submit"
 														disabled={savingProfile}
-														className="bg-[#00154B] text-white px-4 py-2 rounded-lg hover:bg-[#00296B]"
+														className="bg-[#00154B] text-white px-4 py-2 rounded-lg hover:bg-[#00296B] w-full sm:w-auto"
 													>
 														{savingProfile ? 'Saving...' : 'Save'}
 													</button>
 													<button
 														type="button"
 														onClick={() => setEditingProfile(false)}
-														className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-[#00154B]/10"
+														className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-[#00154B]/10 w-full sm:w-auto"
 													>
 														Cancel
 													</button>

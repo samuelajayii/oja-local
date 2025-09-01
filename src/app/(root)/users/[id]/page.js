@@ -7,6 +7,7 @@ import { useAuth } from '@/app/context/AuthContext'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { Settings, Heart, MessageCircle, Plus, Edit, Trash2, Eye, User } from 'lucide-react'
 import Link from 'next/link'
+import MessagesDashboard from '@/components/MessagesDashboard'
 
 export default function UserDashboard() {
 	const { currentUser: user } = useAuth()
@@ -394,97 +395,7 @@ export default function UserDashboard() {
 								)}
 
 								{/* Messages Tab */}
-								{activeTab === 'messages' && (
-									<div>
-										<div className="flex items-center justify-between mb-6">
-											<h2 className="text-xl font-semibold">Messages ({conversations.length})</h2>
-										</div>
-
-										{conversations.length === 0 ? (
-											<div className="text-center py-12 px-4">
-												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
-													<MessageCircle className="w-12 h-12 text-gray-300" />
-												</div>
-												<h3 className="text-lg font-semibold mb-2">No messages yet</h3>
-												<p className="text-gray-300 mb-6">Start a conversation with a seller to ask about a listing.</p>
-											</div>
-										) : (
-											<div className="space-y-4">
-												{conversations.map(conv => (
-													<Link
-														key={conv.id}
-														href={`/messages?listingId=${conv.listingId}&conversationWith=${conv.partner?.id || conv.withUser?.id}`}
-														onClick={(e) => {
-															e.preventDefault(); // Prevent default link navigation since we're handling it manually
-															handleConversationClick(conv);
-														}}
-														className="block p-4 bg-[#000814] rounded-lg border border-gray-700 hover:bg-[#001020] transition-colors"
-													>
-														<div className="flex items-start space-x-4">
-															{/* User Avatar */}
-															<div className="flex-shrink-0">
-																{conv.partner?.avatar || conv.withUser?.avatar ? (
-																	<img
-																		src={conv.partner?.avatar || conv.withUser?.avatar}
-																		alt={conv.partner?.name || conv.withUser?.name}
-																		className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover"
-																	/>
-																) : (
-																	<div className="w-10 h-10 sm:w-12 sm:h-12 bg-gray-700 rounded-full flex items-center justify-center">
-																		<User className="w-6 h-6 text-gray-300" />
-																	</div>
-																)}
-															</div>
-
-															{/* Conversation Info */}
-															<div className="flex-1 min-w-0">
-																<div className="flex items-center justify-between mb-1">
-																	<h3 className="font-medium text-white truncate">
-																		{conv.partner?.name || conv.withUser?.name}
-																	</h3>
-																	<span className="text-xs text-gray-400">
-																		{conv.updatedAt ? new Date(conv.updatedAt).toLocaleDateString() : ''}
-																	</span>
-																</div>
-
-																{/* Listing Info */}
-																{conv.listing && (
-																	<div className="flex items-center space-x-2 mb-2">
-																		<span className="text-sm text-gray-400 truncate">
-																			{conv.listing.title}
-																		</span>
-																	</div>
-																)}
-
-																{/* Last Message */}
-																<div className="flex items-center justify-between">
-																	<p className="text-sm text-gray-300 truncate flex-1 mr-2">
-																		{conv.lastMessage ? (
-																			<>
-																				{conv.lastMessage.senderId === user.uid && (
-																					<span className="text-gray-400">You: </span>
-																				)}
-																				{conv.lastMessage.content}
-																			</>
-																		) : (
-																			'No messages yet'
-																		)}
-																	</p>
-																	<span className="text-xs text-gray-500 ml-2">
-																		{conv.lastMessage?.createdAt ? new Date(conv.lastMessage.createdAt).toLocaleTimeString('en-US', {
-																			hour: '2-digit',
-																			minute: '2-digit'
-																		}) : ''}
-																	</span>
-																</div>
-															</div>
-														</div>
-													</Link>
-												))}
-											</div>
-										)}
-									</div>
-								)}
+								{activeTab === 'messages' && <MessagesDashboard />}
 
 								{/* Profile Tab */}
 								{activeTab === 'profile' && (

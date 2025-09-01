@@ -129,27 +129,24 @@ export default function ListingDetailPage() {
 
       setSendingMessage(true)
       try {
-         const token = await user.getIdToken()
-         const response = await fetch('/api/messages', {
-            method: 'POST',
-            headers: {
-               'Content-Type': 'application/json',
-               Authorization: `Bearer ${token}`
-            },
-            body: JSON.stringify({
-               content: message,
-               receiverId: listing.user.id,
-               listingId: listing.id
-            })
+         // Import Firestore functions dynamically
+         const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
+         const { db } = await import('@/app/lib/firebase')
+         
+         // Add message directly to Firestore
+         await addDoc(collection(db, 'messages'), {
+            content: message.trim(),
+            senderId: user.uid,
+            receiverId: listing.user.id,
+            listingId: listing.id,
+            participants: [user.uid, listing.user.id],
+            createdAt: serverTimestamp(),
+            isRead: false
          })
-         if (response.ok) {
-            setMessage('')
-            setShowMessageModal(false)
-            alert('Message sent successfully!')
-         } else {
-            const error = await response.json()
-            alert(error.error || 'Failed to send message')
-         }
+         
+         setMessage('')
+         setShowMessageModal(false)
+         alert('Message sent successfully!')
       } catch (error) {
          console.error('Error sending message:', error)
          alert('Failed to send message')
@@ -186,8 +183,7 @@ export default function ListingDetailPage() {
    if (loading) return <div className="min-h-screen flex items-center justify-center"><div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div></div>
    if (!listing) return <div className="min-h-screen flex items-center justify-center"><p className="text-white">Listing not found</p></div>
 
-   const isOwner = user.uid === listing.user.id
-
+   const isOwner = user?.uid === listing.user.id
 
    return (
       <div className="min-h-screen mt-32 bg-[#000814]">
@@ -249,7 +245,7 @@ export default function ListingDetailPage() {
 
                         {/* Action Buttons */}
                         <div className="flex items-center space-x-2">
-                           {!isOwner && (
+                           {!isOwner && user && (
                               <button onClick={toggleFavorite} className={`p-2 rounded-lg border ${isFavorited ? 'border-red-500 text-red-500 bg-red-50' : 'border-gray-300 text-white hover:text-red-500 hover:border-red-500'}`}>
                                  <Heart className={`w-5 h-5 ${isFavorited ? 'fill-current' : ''}`} />
                               </button>

@@ -7,6 +7,16 @@ import { useAuth } from '@/app/context/AuthContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Send, User, MessageCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  orderBy, 
+  onSnapshot, 
+  serverTimestamp 
+} from 'firebase/firestore'
+import { db } from '@/app/lib/firebase'
 
 export default function MessagesPage() {
   const { currentUser: user } = useAuth()
@@ -26,7 +36,50 @@ export default function MessagesPage() {
 
   useEffect(() => {
     if (user && listingId && conversationWith) {
-      fetchMessages()
+      // Set up real-time listener for messages
+      const messagesRef = collection(db, 'messages')
+      const q = query(
+        messagesRef,
+        where('listingId', '==', listingId),
+        where('participants', 'array-contains-any', [user.uid, conversationWith]),
+        orderBy('createdAt', 'asc')
+      )
+
+      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
+        const messagesData = []
+        
+        for (const doc of querySnapshot.docs) {
+          const messageData = doc.data()
+          
+          // Only include messages between these two specific users
+          if ((messageData.senderId === user.uid && messageData.receiverId === conversationWith) ||
+              (messageData.senderId === conversationWith && messageData.receiverId === user.uid)) {
+            
+            // Get user and listing data from your existing API
+            const messageWithData = {
+              id: doc.id,
+              ...messageData,
+              createdAt: messageData.createdAt?.toDate?.() || new Date(messageData.createdAt)
+            }
+            
+            messagesData.push(messageWithData)
+          }
+        }
+
+        setMessages(messagesData)
+        
+        // Get conversation user and listing info from the first message
+        if (messagesData.length > 0) {
+          await fetchAdditionalData(messagesData[0])
+        }
+        
+        setLoading(false)
+      }, (error) => {
+        console.error('Error listening to messages:', error)
+        setLoading(false)
+      })
+
+      return () => unsubscribe()
     }
   }, [user, listingId, conversationWith])
 
@@ -34,42 +87,28 @@ export default function MessagesPage() {
     scrollToBottom()
   }, [messages])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
-
-  const fetchMessages = async () => {
+  const fetchAdditionalData = async (firstMessage) => {
     try {
-      const token = await user.getIdToken()
-      const response = await fetch(
-        `/api/messages?listingId=${listingId}&conversationWith=${conversationWith}`,
-        {
-          headers: { 'Authorization': `Bearer ${token}` }
-        }
-      )
+      // Get conversation user data
+      const userResponse = await fetch(`/api/users/${conversationWith}`)
+      if (userResponse.ok) {
+        const userData = await userResponse.json()
+        setConversationUser(userData)
+      }
 
-      if (response.ok) {
-        const messagesData = await response.json()
-        setMessages(messagesData)
-
-        // Set conversation user and listing from the first message
-        if (messagesData.length > 0) {
-          const firstMessage = messagesData[0]
-          setConversationUser(
-            firstMessage.senderId === user.uid
-              ? firstMessage.receiver
-              : firstMessage.sender
-          )
-          setListing(firstMessage.listing)
-        }
-      } else {
-        console.error('Failed to fetch messages:', response.status, response.statusText)
+      // Get listing data
+      const listingResponse = await fetch(`/api/listings/${listingId}`)
+      if (listingResponse.ok) {
+        const listingData = await listingResponse.json()
+        setListing(listingData)
       }
     } catch (error) {
-      console.error('Error fetching messages:', error)
-    } finally {
-      setLoading(false)
+      console.error('Error fetching additional data:', error)
     }
+  }
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
   const sendMessage = async (e) => {
@@ -78,28 +117,18 @@ export default function MessagesPage() {
 
     setSending(true)
     try {
-      const token = await user.getIdToken()
-      const response = await fetch('/api/messages', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          content: newMessage.trim(),
-          receiverId: conversationWith,
-          listingId: listingId
-        })
+      // Add message to Firestore directly for real-time update
+      await addDoc(collection(db, 'messages'), {
+        content: newMessage.trim(),
+        senderId: user.uid,
+        receiverId: conversationWith,
+        listingId: listingId,
+        participants: [user.uid, conversationWith],
+        createdAt: serverTimestamp(),
+        isRead: false
       })
 
-      if (response.ok) {
-        const sentMessage = await response.json()
-        setMessages(prev => [...prev, sentMessage])
-        setNewMessage('')
-      } else {
-        const error = await response.json().catch(() => ({ error: 'Failed to send message' }))
-        alert(error.error || 'Failed to send message')
-      }
+      setNewMessage('')
     } catch (error) {
       console.error('Error sending message:', error)
       alert('Failed to send message')
@@ -294,7 +323,7 @@ export default function MessagesPage() {
                 <Send className="w-5 h-5" />
               )}
             </button>
-            </form>
+          </form>
         </div>
       </div>
     </div>

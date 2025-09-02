@@ -80,6 +80,7 @@ model Message {
   listingId  String
   isRead     Boolean  @default(false)
   receiverId String
+  conversationType MessageType @default(REGULAR)
   listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
   sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
@@ -122,4 +123,9 @@ enum NotificationType {
   PRICE_DROP
   LISTING_UPDATE
   USER
+}
+
+enum MessageType {
+  REGULAR
+  CONVERSATION_STARTER
 }

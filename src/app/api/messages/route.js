@@ -211,9 +211,12 @@ export async function POST(request) {
       content: content.trim(),
       senderId: user.uid,
       receiverId,
-      createdAt: now, // Use regular Date object for array items
+      createdAt: now,
       isRead: false
     };
+
+    // Check if this is a new conversation
+    let isNewConversation = false;
 
     // Use a transaction to ensure data consistency
     await firestore.runTransaction(async (transaction) => {
@@ -233,6 +236,8 @@ export async function POST(request) {
         });
       } else {
         // Create new conversation
+        isNewConversation = true;
+        
         transaction.set(conversationRef, {
           id: conversationId,
           listingId: listingId,
@@ -247,6 +252,30 @@ export async function POST(request) {
       }
     });
 
+    // Update message count in PostgreSQL if this is a new conversation
+    if (isNewConversation) {
+      try {
+        // Create a Message record in PostgreSQL to maintain the count
+        // This creates a lightweight record that represents the conversation
+        await db.message.create({
+          data: {
+            id: conversationId, // Use conversation ID as message ID to ensure uniqueness
+            content: `Conversation started`, // Placeholder content
+            senderId: user.uid,
+            receiverId: receiverId,
+            listingId: listingId,
+            conversationType: 'CONVERSATION_STARTER', // Add a type field to distinguish
+          }
+        });
+
+        console.log(`Created conversation record in PostgreSQL for listing ${listingId}`);
+      } catch (pgError) {
+        // If there's an error creating the PostgreSQL record, log it but don't fail the whole operation
+        // since the message was successfully created in Firestore
+        console.error('Error creating PostgreSQL conversation record:', pgError);
+      }
+    }
+
     // Get sender info for response
     const sender = await db.user.findUnique({
       where: { id: user.uid },
@@ -255,7 +284,7 @@ export async function POST(request) {
 
     const responseMessage = {
       ...newMessage,
-      createdAt: now, // Use the same timestamp
+      createdAt: now,
       sender,
       receiver,
       listing: { id: listing.id, title: listing.title }

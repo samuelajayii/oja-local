@@ -43,7 +43,7 @@ export async function GET(request) {
                 },
                 _count: {
                     select: {
-                        messages: true,
+                        conversations: true, // Changed from messages to conversations
                         favorites: true
                     }
                 }
@@ -101,7 +101,13 @@ export async function POST(request) {
                 user: {
                     select: { id: true, name: true, avatar: true }
                 },
-                category: true
+                category: true,
+                _count: {
+                    select: {
+                        conversations: true,
+                        favorites: true
+                    }
+                }
             }
         });
 

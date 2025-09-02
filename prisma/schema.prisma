@@ -21,6 +21,8 @@ model User {
   listings                                      Listing[]
   receivedMessages                              Message[]       @relation("ReceivedMessages")
   sentMessages                                  Message[]       @relation("SentMessages")
+  conversationsAsUser1                          Conversation[]  @relation("User1Conversations")
+  conversationsAsUser2                          Conversation[]  @relation("User2Conversations")
   notifications_notifications_fromUserIdTousers notifications[] @relation("notifications_fromUserIdTousers")
   notifications_notifications_userIdTousers     notifications[] @relation("notifications_userIdTousers")
 
@@ -52,12 +54,34 @@ model Listing {
   category      Category        @relation(fields: [categoryId], references: [id])
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages      Message[]
+  conversations Conversation[]
   notifications notifications[]
 
   @@index([status, createdAt])
   @@index([categoryId])
   @@index([userId])
   @@map("listings")
+}
+
+model Conversation {
+  id               String    @id @default(cuid())
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  lastMessageAt    DateTime  @default(now())
+  listingId        String
+  user1Id          String    // The listing owner
+  user2Id          String    // The person messaging about the listing
+  messages         Message[]
+  listing          Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user1            User      @relation("User1Conversations", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2            User      @relation("User2Conversations", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([listingId, user1Id, user2Id])
+  @@index([listingId])
+  @@index([user1Id])
+  @@index([user2Id])
+  @@index([lastMessageAt])
+  @@map("conversations")
 }
 
 model Favorite {
@@ -73,20 +97,23 @@ model Favorite {
 }
 
 model Message {
-  id         String   @id @default(cuid())
-  content    String
-  createdAt  DateTime @default(now())
-  senderId   String
-  listingId  String
-  isRead     Boolean  @default(false)
-  receiverId String
-  conversationType MessageType @default(REGULAR)
-  listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
-  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  id               String        @id @default(cuid())
+  content          String
+  createdAt        DateTime      @default(now())
+  senderId         String
+  listingId        String
+  conversationId   String
+  isRead           Boolean       @default(false)
+  receiverId       String
+  conversationType MessageType   @default(REGULAR)
+  listing          Listing       @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  conversation     Conversation  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  receiver         User          @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender           User          @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
 
   @@index([receiverId, isRead])
   @@index([listingId])
+  @@index([conversationId])
   @@map("messages")
 }
 

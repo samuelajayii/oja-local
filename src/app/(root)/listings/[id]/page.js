@@ -317,7 +317,7 @@ export default function ListingDetailPage() {
                      <div className="border-t border-gray-700 pt-4 mt-4">
                         <div className="flex items-center text-sm text-white space-x-6">
                            <span className="flex items-center">
-                              <MessageCircle className="w-4 h-4 mr-1" /> {listing._count.messages} messages
+                              <MessageCircle className="w-4 h-4 mr-1" /> {listing._count.conversations} messages
                            </span>
                            <span className="flex items-center">
                               <Heart className="w-4 h-4 mr-1" /> {listing._count.favorites} favorites

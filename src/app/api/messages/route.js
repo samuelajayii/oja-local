@@ -199,11 +199,14 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Receiver not found' }, { status: 404 });
     }
 
+    // Determine who is user1 (listing owner) and user2 (the other person)
+    const user1Id = listing.userId; // Always the listing owner
+    const user2Id = user.uid === listing.userId ? receiverId : user.uid; // The other person
+
     // Generate conversation ID
-    const conversationId = getConversationId(user.uid, receiverId, listingId);
+    const conversationId = getConversationId(user1Id, user2Id, listingId);
     const conversationRef = firestore.collection('conversations').doc(conversationId);
     
-    // Create timestamp once for consistency
     const now = new Date();
     
     const newMessage = {
@@ -215,10 +218,55 @@ export async function POST(request) {
       isRead: false
     };
 
-    // Check if this is a new conversation
-    let isNewConversation = false;
+    // Check if conversation exists in PostgreSQL
+    let conversation = await db.conversation.findUnique({
+      where: {
+        listingId_user1Id_user2Id: {
+          listingId: listingId,
+          user1Id: user1Id,
+          user2Id: user2Id
+        }
+      }
+    });
 
-    // Use a transaction to ensure data consistency
+    // Create conversation if it doesn't exist
+    if (!conversation) {
+      try {
+        conversation = await db.conversation.create({
+          data: {
+            id: conversationId,
+            listingId: listingId,
+            user1Id: user1Id, // Listing owner
+            user2Id: user2Id, // Other person
+            lastMessageAt: now
+          }
+        });
+        console.log(`Created new conversation: ${conversationId}`);
+      } catch (createError) {
+        if (createError.code === 'P2002') {
+          // Handle race condition - conversation was created by another request
+          conversation = await db.conversation.findUnique({
+            where: {
+              listingId_user1Id_user2Id: {
+                listingId: listingId,
+                user1Id: user1Id,
+                user2Id: user2Id
+              }
+            }
+          });
+        } else {
+          throw createError;
+        }
+      }
+    } else {
+      // Update existing conversation's lastMessageAt
+      await db.conversation.update({
+        where: { id: conversation.id },
+        data: { lastMessageAt: now }
+      });
+    }
+
+    // Handle Firestore conversation
     await firestore.runTransaction(async (transaction) => {
       const conversationDoc = await transaction.get(conversationRef);
       
@@ -235,13 +283,11 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp()
         });
       } else {
-        // Create new conversation
-        isNewConversation = true;
-        
+        // Create new conversation in Firestore
         transaction.set(conversationRef, {
           id: conversationId,
           listingId: listingId,
-          participants: [user.uid, receiverId],
+          participants: [user1Id, user2Id],
           messages: [newMessage],
           createdAt: FieldValue.serverTimestamp(),
           updatedAt: FieldValue.serverTimestamp(),
@@ -252,45 +298,19 @@ export async function POST(request) {
       }
     });
 
-    // Update message count in PostgreSQL if this is a new conversation
-    if (isNewConversation) {
-      try {
-        // Create a Message record in PostgreSQL to maintain the count
-        // This creates a lightweight record that represents the conversation
-        await db.message.create({
-          data: {
-            id: conversationId, // Use conversation ID as message ID to ensure uniqueness
-            content: `Conversation started`, // Placeholder content
-            senderId: user.uid,
-            receiverId: receiverId,
-            listingId: listingId,
-            conversationType: 'CONVERSATION_STARTER', // Add a type field to distinguish
-          }
-        });
-
-        console.log(`Created conversation record in PostgreSQL for listing ${listingId}`);
-      } catch (pgError) {
-        // If there's an error creating the PostgreSQL record, log it but don't fail the whole operation
-        // since the message was successfully created in Firestore
-        console.error('Error creating PostgreSQL conversation record:', pgError);
-      }
-    }
-
     // Get sender info for response
     const sender = await db.user.findUnique({
       where: { id: user.uid },
       select: { id: true, name: true, avatar: true }
     });
 
-    const responseMessage = {
+    return NextResponse.json({
       ...newMessage,
       createdAt: now,
       sender,
       receiver,
       listing: { id: listing.id, title: listing.title }
-    };
-
-    return NextResponse.json(responseMessage);
+    });
   } catch (error) {
     console.error('Create message error:', error);
     return NextResponse.json({ error: 'Failed to send message' }, { status: 500 });

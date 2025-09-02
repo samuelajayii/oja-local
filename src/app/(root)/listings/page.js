@@ -373,7 +373,7 @@ export default function ListingsGrid() {
                     <div className="flex items-center space-x-3 text-sm text-white">
                       <span className="flex items-center">
                         <MessageCircle className="w-4 h-4 mr-1" />
-                        {listing._count.messages}
+                        {listing._count.conversations}
                       </span>
                       <span className="flex items-center">
                         <Heart className="w-4 h-4 mr-1" />

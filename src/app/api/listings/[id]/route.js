@@ -19,7 +19,7 @@ export async function GET(request, { params }) {
                 category: true,
                 _count: {
                     select: {
-                        messages: true,
+                        conversations: true, // Changed from messages to conversations
                         favorites: true
                     }
                 }
@@ -65,7 +65,7 @@ export async function DELETE(request, { params }) {
             );
         }
 
-        // Delete listing from database
+        // Delete listing from database (this will cascade delete conversations and messages)
         await db.listing.delete({
             where: { id: params.id }
         });
@@ -115,7 +115,13 @@ export async function PUT(request, { params }) {
                 user: {
                     select: { id: true, name: true, avatar: true }
                 },
-                category: true
+                category: true,
+                _count: {
+                    select: {
+                        conversations: true,
+                        favorites: true
+                    }
+                }
             }
         });
 

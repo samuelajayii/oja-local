@@ -1,9 +1,17 @@
 // src/app/api/transactions/route.js
 import { NextResponse } from 'next/server';
-import { db } from '@/app/lib/db';
 import { verifyAuthToken } from '@/app/lib/auth-helpers';
+import { db } from '@/app/lib/db';
+import { db as firestore } from '@/app/lib/firebase-admin';
+import { FieldValue } from 'firebase-admin/firestore';
 
-// GET all transactions for a user
+// Helper function to generate conversation ID
+const getConversationId = (userId1, userId2, listingId) => {
+  const sortedUsers = [userId1, userId2].sort();
+  return `${listingId}_${sortedUsers[0]}_${sortedUsers[1]}`;
+};
+
+// GET - Fetch user's transactions
 export async function GET(request) {
   try {
     const user = await verifyAuthToken(request);
@@ -12,20 +20,17 @@ export async function GET(request) {
     }
 
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type'); // 'buyer', 'seller', or 'all'
+    const status = searchParams.get('status'); // 'completed', 'pending', etc.
 
-    let whereClause = {};
-    if (type === 'buyer') {
-      whereClause = { buyerId: user.uid };
-    } else if (type === 'seller') {
-      whereClause = { sellerId: user.uid };
-    } else {
-      whereClause = {
-        OR: [
-          { buyerId: user.uid },
-          { sellerId: user.uid }
-        ]
-      };
+    const whereClause = {
+      OR: [
+        { sellerId: user.uid },
+        { buyerId: user.uid }
+      ]
+    };
+
+    if (status) {
+      whereClause.status = status.toUpperCase();
     }
 
     const transactions = await db.transaction.findMany({
@@ -36,6 +41,13 @@ export async function GET(request) {
             category: true
           }
         },
+        seller: {
+          select: {
+            id: true,
+            name: true,
+            avatar: true
+          }
+        },
         buyer: {
           select: {
             id: true,
@@ -43,25 +55,21 @@ export async function GET(request) {
             avatar: true
           }
         },
-        seller: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true
-          }
-        }
+        conversation: true
       },
-      orderBy: { createdAt: 'desc' }
+      orderBy: {
+        createdAt: 'desc'
+      }
     });
 
     return NextResponse.json(transactions);
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Fetch transactions error:', error);
     return NextResponse.json({ error: 'Failed to fetch transactions' }, { status: 500 });
   }
 }
 
-// POST - Create a new transaction
+// POST - Initiate a transaction
 export async function POST(request) {
   try {
     const user = await verifyAuthToken(request);
@@ -69,13 +77,23 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { listingId, buyerId } = await request.json();
+    const { listingId, conversationWith, agreedPrice } = await request.json();
 
-    // Verify the listing exists and get its details
+    if (!listingId || !conversationWith || agreedPrice === undefined) {
+      return NextResponse.json({
+        error: 'listingId, conversationWith, and agreedPrice are required'
+      }, { status: 400 });
+    }
+
+    // Verify listing exists and get details
     const listing = await db.listing.findUnique({
       where: { id: listingId },
-      include: {
-        user: true
+      select: { 
+        id: true, 
+        userId: true, 
+        title: true, 
+        price: true,
+        status: true
       }
     });
 
@@ -83,34 +101,40 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
     }
 
-    // Check if the user is either the buyer or seller
-    const isSeller = user.uid === listing.userId;
-    const isBuyer = user.uid === buyerId;
-
-    if (!isSeller && !isBuyer) {
-      return NextResponse.json({ error: 'Unauthorized to create this transaction' }, { status: 403 });
+    if (listing.status !== 'ACTIVE') {
+      return NextResponse.json({ error: 'Listing is not active' }, { status: 400 });
     }
 
-    // Check if a transaction already exists for this listing
+    // Determine seller and buyer
+    const sellerId = listing.userId;
+    const buyerId = user.uid === sellerId ? conversationWith : user.uid;
+    
+    // Can't create transaction with yourself
+    if (sellerId === buyerId) {
+      return NextResponse.json({ error: 'Cannot create transaction with yourself' }, { status: 400 });
+    }
+
+    // Generate conversation ID
+    const conversationId = getConversationId(sellerId, buyerId, listingId);
+
+    // Check if transaction already exists
     const existingTransaction = await db.transaction.findUnique({
-      where: { listingId }
+      where: { listingId: listingId }
     });
 
     if (existingTransaction) {
       return NextResponse.json({ error: 'Transaction already exists for this listing' }, { status: 400 });
     }
 
-    // Create the transaction
+    // Create transaction
     const transaction = await db.transaction.create({
       data: {
         listingId,
-        sellerId: listing.userId,
+        conversationId,
+        sellerId,
         buyerId,
-        finalPrice: listing.price,
-        status: 'PENDING',
-        // If the current user is initiating, mark their confirmation
-        ...(isSeller ? { sellerConfirmedAt: new Date() } : {}),
-        ...(isBuyer ? { buyerConfirmedAt: new Date() } : {})
+        agreedPrice: parseFloat(agreedPrice),
+        status: 'PENDING'
       },
       include: {
         listing: {
@@ -118,20 +142,46 @@ export async function POST(request) {
             category: true
           }
         },
-        buyer: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true
-          }
-        },
         seller: {
-          select: {
-            id: true,
-            name: true,
-            avatar: true
-          }
+          select: { id: true, name: true, avatar: true }
+        },
+        buyer: {
+          select: { id: true, name: true, avatar: true }
         }
+      }
+    });
+
+    // Update conversation status
+    await db.conversation.update({
+      where: { id: conversationId },
+      data: { status: 'TRANSACTION_PENDING' }
+    });
+
+    // Add system message to Firestore conversation
+    const conversationRef = firestore.collection('conversations').doc(conversationId);
+    const systemMessage = {
+      id: `sys_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      content: `Transaction initiated for $${parseFloat(agreedPrice).toFixed(2)}. Both parties need to confirm completion.`,
+      senderId: 'system',
+      receiverId: 'system',
+      createdAt: new Date(),
+      isRead: true,
+      type: 'TRANSACTION_REQUEST'
+    };
+
+    await firestore.runTransaction(async (firestoreTransaction) => {
+      const conversationDoc = await firestoreTransaction.get(conversationRef);
+      
+      if (conversationDoc.exists) {
+        const currentData = conversationDoc.data();
+        const currentMessages = currentData.messages || [];
+        
+        firestoreTransaction.update(conversationRef, {
+          messages: [...currentMessages, systemMessage],
+          transactionId: transaction.id,
+          transactionStatus: 'PENDING',
+          updatedAt: FieldValue.serverTimestamp()
+        });
       }
     });
 

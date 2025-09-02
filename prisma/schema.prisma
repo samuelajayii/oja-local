@@ -23,6 +23,8 @@ model User {
   sentMessages                                  Message[]       @relation("SentMessages")
   conversationsAsUser1                          Conversation[]  @relation("User1Conversations")
   conversationsAsUser2                          Conversation[]  @relation("User2Conversations")
+  sellerTransactions                            Transaction[]   @relation("SellerTransactions")
+  buyerTransactions                             Transaction[]   @relation("BuyerTransactions")
   notifications_notifications_fromUserIdTousers notifications[] @relation("notifications_fromUserIdTousers")
   notifications_notifications_userIdTousers     notifications[] @relation("notifications_userIdTousers")
 
@@ -55,6 +57,7 @@ model Listing {
   user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   messages      Message[]
   conversations Conversation[]
+  transaction   Transaction?
   notifications notifications[]
 
   @@index([status, createdAt])
@@ -64,17 +67,19 @@ model Listing {
 }
 
 model Conversation {
-  id               String    @id @default(cuid())
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  lastMessageAt    DateTime  @default(now())
+  id               String             @id @default(cuid())
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  lastMessageAt    DateTime           @default(now())
   listingId        String
-  user1Id          String    // The listing owner
-  user2Id          String    // The person messaging about the listing
+  user1Id          String             // The listing owner
+  user2Id          String             // The person messaging about the listing
+  status           ConversationStatus @default(ACTIVE)
   messages         Message[]
-  listing          Listing   @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  user1            User      @relation("User1Conversations", fields: [user1Id], references: [id], onDelete: Cascade)
-  user2            User      @relation("User2Conversations", fields: [user2Id], references: [id], onDelete: Cascade)
+  listing          Listing            @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  user1            User               @relation("User1Conversations", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2            User               @relation("User2Conversations", fields: [user2Id], references: [id], onDelete: Cascade)
+  transaction      Transaction?
 
   @@unique([listingId, user1Id, user2Id])
   @@index([listingId])
@@ -82,6 +87,33 @@ model Conversation {
   @@index([user2Id])
   @@index([lastMessageAt])
   @@map("conversations")
+}
+
+model Transaction {
+  id               String            @id @default(cuid())
+  listingId        String            @unique
+  conversationId   String            @unique
+  sellerId         String
+  buyerId          String
+  agreedPrice      Decimal
+  status           TransactionStatus @default(PENDING)
+  sellerConfirmed  Boolean           @default(false)
+  buyerConfirmed   Boolean           @default(false)
+  completedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  // Relations
+  listing      Listing      @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  seller       User         @relation("SellerTransactions", fields: [sellerId], references: [id], onDelete: Cascade)
+  buyer        User         @relation("BuyerTransactions", fields: [buyerId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([sellerId])
+  @@index([buyerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("transactions")
 }
 
 model Favorite {
@@ -144,12 +176,29 @@ enum ListingStatus {
   DRAFT
 }
 
+enum ConversationStatus {
+  ACTIVE
+  TRANSACTION_PENDING
+  TRANSACTION_COMPLETED
+  ARCHIVED
+}
+
+enum TransactionStatus {
+  PENDING
+  SELLER_CONFIRMED
+  BUYER_CONFIRMED
+  COMPLETED
+  CANCELLED
+}
+
 enum NotificationType {
   MESSAGE
   FAVORITE
   PRICE_DROP
   LISTING_UPDATE
   USER
+  TRANSACTION_CONFIRMED
+  TRANSACTION_COMPLETED
 }
 
 enum MessageType {

@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react'
 import { useAuth } from '@/app/context/AuthContext'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { Settings, Heart, MessageCircle, Plus, Edit, Trash2, Eye, User } from 'lucide-react'
+import { Settings, Heart, MessageCircle, Plus, Edit, Trash2, Eye, User, CreditCard, CheckCircle, Clock, XCircle } from 'lucide-react'
 import Link from 'next/link'
 import MessagesDashboard from '@/components/MessagesDashboard'
 
@@ -19,6 +19,7 @@ export default function UserDashboard() {
 	const [userListings, setUserListings] = useState([])
 	const [favorites, setFavorites] = useState([])
 	const [conversations, setConversations] = useState([])
+	const [transactions, setTransactions] = useState([])
 	const [loading, setLoading] = useState(true)
 	const [profile, setProfile] = useState({
 		name: '',
@@ -28,6 +29,7 @@ export default function UserDashboard() {
 	})
 	const [editingProfile, setEditingProfile] = useState(false)
 	const [savingProfile, setSavingProfile] = useState(false)
+	const [confirmingTransaction, setConfirmingTransaction] = useState(null)
 
 	useEffect(() => {
 		if (user) {
@@ -68,6 +70,17 @@ export default function UserDashboard() {
 				if (messagesResponse.ok) {
 					const conversationsData = await messagesResponse.json()
 					setConversations(conversationsData)
+				}
+			}
+
+			// Fetch transactions
+			if (activeTab === 'transactions') {
+				const transactionsResponse = await fetch('/api/transactions', {
+					headers: { 'Authorization': `Bearer ${token}` }
+				})
+				if (transactionsResponse.ok) {
+					const transactionsData = await transactionsResponse.json()
+					setTransactions(transactionsData)
 				}
 			}
 
@@ -128,6 +141,58 @@ export default function UserDashboard() {
 		}
 	}
 
+	const confirmTransaction = async (transactionId) => {
+		if (!confirm('Are you sure you want to confirm this transaction?')) return
+
+		setConfirmingTransaction(transactionId)
+		try {
+			const token = await user.getIdToken()
+			const response = await fetch(`/api/transactions/${transactionId}/confirm`, {
+				method: 'POST',
+				headers: { 'Authorization': `Bearer ${token}` }
+			})
+
+			if (response.ok) {
+				const result = await response.json()
+				alert(result.message)
+				// Refresh transactions
+				fetchUserData()
+			} else {
+				const err = await response.json().catch(() => ({}))
+				alert(err.error || 'Failed to confirm transaction')
+			}
+		} catch (error) {
+			console.error('Error confirming transaction:', error)
+			alert('Failed to confirm transaction')
+		} finally {
+			setConfirmingTransaction(null)
+		}
+	}
+
+	const cancelTransaction = async (transactionId) => {
+		if (!confirm('Are you sure you want to cancel this transaction?')) return
+
+		try {
+			const token = await user.getIdToken()
+			const response = await fetch(`/api/transactions/${transactionId}`, {
+				method: 'DELETE',
+				headers: { 'Authorization': `Bearer ${token}` }
+			})
+
+			if (response.ok) {
+				alert('Transaction cancelled successfully')
+				// Refresh transactions
+				fetchUserData()
+			} else {
+				const err = await response.json().catch(() => ({}))
+				alert(err.error || 'Failed to cancel transaction')
+			}
+		} catch (error) {
+			console.error('Error cancelling transaction:', error)
+			alert('Failed to cancel transaction')
+		}
+	}
+
 	const saveProfile = async (e) => {
 		e.preventDefault()
 		setSavingProfile(true)
@@ -161,6 +226,51 @@ export default function UserDashboard() {
 	const handleConversationClick = (conv) => {
 		// Navigate to messages
 		router.push(`/messages?listingId=${conv.listingId}&conversationWith=${conv.partner?.id || conv.withUser?.id}`)
+	}
+
+	const getStatusIcon = (status) => {
+		switch (status) {
+			case 'COMPLETED':
+				return <CheckCircle className="w-5 h-5 text-green-500" />
+			case 'PENDING':
+			case 'SELLER_CONFIRMED':
+			case 'BUYER_CONFIRMED':
+				return <Clock className="w-5 h-5 text-yellow-500" />
+			case 'CANCELLED':
+				return <XCircle className="w-5 h-5 text-red-500" />
+			default:
+				return <CreditCard className="w-5 h-5 text-gray-500" />
+		}
+	}
+
+	const getStatusText = (transaction) => {
+		if (transaction.status === 'COMPLETED') return 'Completed'
+		if (transaction.status === 'CANCELLED') return 'Cancelled'
+
+		const isSeller = transaction.sellerId === user.uid
+		const isSellerConfirmed = transaction.sellerConfirmed
+		const isBuyerConfirmed = transaction.buyerConfirmed
+
+		if (isSeller) {
+			if (isSellerConfirmed && !isBuyerConfirmed) return 'Waiting for buyer confirmation'
+			if (!isSellerConfirmed) return 'Pending your confirmation'
+			return 'Pending'
+		} else {
+			if (isBuyerConfirmed && !isSellerConfirmed) return 'Waiting for seller confirmation'
+			if (!isBuyerConfirmed) return 'Pending your confirmation'
+			return 'Pending'
+		}
+	}
+
+	const canConfirm = (transaction) => {
+		if (transaction.status === 'COMPLETED' || transaction.status === 'CANCELLED') return false
+
+		const isSeller = transaction.sellerId === user.uid
+		return isSeller ? !transaction.sellerConfirmed : !transaction.buyerConfirmed
+	}
+
+	const canCancel = (transaction) => {
+		return transaction.status === 'PENDING'
 	}
 
 	// --- NEW robust setActiveTab using current pathname ---
@@ -214,6 +324,7 @@ export default function UserDashboard() {
 						<nav className="flex space-x-8 px-4 sm:px-6 overflow-x-auto scrollbar-thin scrollbar-thumb-gray-700">
 							{[
 								{ id: 'listings', name: 'My Listings', icon: Plus },
+								{ id: 'transactions', name: 'Transactions', icon: CreditCard },
 								{ id: 'favorites', name: 'Favorites', icon: Heart },
 								{ id: 'messages', name: 'Messages', icon: MessageCircle },
 								{ id: 'profile', name: 'Profile', icon: Settings }
@@ -320,7 +431,7 @@ export default function UserDashboard() {
 																<button
 																	onClick={() => deleteListing(listing.id)}
 																	className="bg-red-600 text-white flex items-center gap-1 justify-center p-2 rounded-lg hover:bg-red-700 w-full sm:w-auto"
-																>	
+																>
 																	<Trash2 className="w-4 h-4" />
 																	Delete
 																</button>
@@ -328,6 +439,152 @@ export default function UserDashboard() {
 														</div>
 													</div>
 												))}
+											</div>
+										)}
+									</div>
+								)}
+
+								{/* Transactions Tab */}
+								{activeTab === 'transactions' && (
+									<div>
+										<div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-6 gap-3">
+											<h2 className="text-xl font-semibold">
+												Transactions ({transactions.length})
+											</h2>
+										</div>
+
+										{transactions.length === 0 ? (
+											<div className="text-center py-12 px-4">
+												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
+													<CreditCard className="w-12 h-12 text-gray-300" />
+												</div>
+												<h3 className="text-lg font-semibold mb-2">No transactions yet</h3>
+												<p className="text-gray-300 mb-6">Start buying or selling to see your transactions here.</p>
+												<Link
+													href="/"
+													className="bg-[#00154B] text-white px-6 py-2 rounded-lg hover:bg-[#00296B]"
+												>
+													Browse Listings
+												</Link>
+											</div>
+										) : (
+											<div className="space-y-4">
+												{transactions.map((transaction) => {
+													const isSeller = transaction.sellerId === user.uid
+													const otherUser = isSeller ? transaction.buyer : transaction.seller
+
+													return (
+														<div key={transaction.id} className="bg-[#001020] rounded-lg border border-gray-700 p-6">
+															<div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+																<div className="flex items-start space-x-4">
+																	{transaction.listing.images && transaction.listing.images.length > 0 ? (
+																		<img
+																			src={transaction.listing.images[0]}
+																			alt={transaction.listing.title}
+																			className="w-16 h-16 rounded-lg object-cover flex-shrink-0"
+																		/>
+																	) : (
+																		<div className="w-16 h-16 bg-gray-700 rounded-lg flex items-center justify-center flex-shrink-0">
+																			<CreditCard className="w-6 h-6 text-gray-300" />
+																		</div>
+																	)}
+
+																	<div className="min-w-0 flex-1">
+																		<h3 className="font-semibold text-lg mb-1">
+																			{transaction.listing.title}
+																		</h3>
+																		<div className="flex items-center space-x-4 text-sm text-gray-300 mb-2">
+																			<span>
+																				{isSeller ? 'Selling to' : 'Buying from'}: {otherUser.name}
+																			</span>
+																			<span className="text-green-500 font-semibold">
+																				${parseFloat(transaction.agreedPrice).toFixed(2)}
+																			</span>
+																		</div>
+																		<div className="flex items-center space-x-2 mb-2">
+																			{getStatusIcon(transaction.status)}
+																			<span className="text-sm">{getStatusText(transaction)}</span>
+																		</div>
+																		<div className="text-xs text-gray-400">
+																			Created: {new Date(transaction.createdAt).toLocaleDateString()}
+																			{transaction.completedAt && (
+																				<span className="ml-4">
+																					Completed: {new Date(transaction.completedAt).toLocaleDateString()}
+																				</span>
+																			)}
+																		</div>
+																	</div>
+																</div>
+
+																<div className="flex flex-col sm:flex-row items-stretch sm:items-center space-y-2 sm:space-y-0 sm:space-x-2 flex-shrink-0">
+																	{canConfirm(transaction) && (
+																		<button
+																			onClick={() => confirmTransaction(transaction.id)}
+																			disabled={confirmingTransaction === transaction.id}
+																			className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center justify-center"
+																		>
+																			{confirmingTransaction === transaction.id ? (
+																				<>
+																					<div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+																					Confirming...
+																				</>
+																			) : (
+																				<>
+																					<CheckCircle className="w-4 h-4 mr-1" />
+																					Confirm
+																				</>
+																			)}
+																		</button>
+																	)}
+
+																	{canCancel(transaction) && (
+																		<button
+																			onClick={() => cancelTransaction(transaction.id)}
+																			className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium flex items-center justify-center"
+																		>
+																			<XCircle className="w-4 h-4 mr-1" />
+																			Cancel
+																		</button>
+																	)}
+
+																	<Link
+																		href={`/listings/${transaction.listing.id}`}
+																		className="bg-[#00154B] text-white px-4 py-2 rounded-lg hover:bg-[#00296B] text-sm font-medium flex items-center justify-center"
+																	>
+																		<Eye className="w-4 h-4 mr-1" />
+																		View Listing
+																	</Link>
+																</div>
+															</div>
+
+															{/* Transaction Details */}
+															<div className="mt-4 pt-4 border-t border-gray-700">
+																<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
+																	<div>
+																		<span className="text-gray-400">Transaction ID:</span>
+																		<p className="font-mono text-xs break-all">{transaction.id}</p>
+																	</div>
+																	<div>
+																		<span className="text-gray-400">Role:</span>
+																		<p>{isSeller ? 'Seller' : 'Buyer'}</p>
+																	</div>
+																	<div>
+																		<span className="text-gray-400">Seller Confirmed:</span>
+																		<p className={transaction.sellerConfirmed ? 'text-green-500' : 'text-gray-400'}>
+																			{transaction.sellerConfirmed ? 'Yes' : 'No'}
+																		</p>
+																	</div>
+																	<div>
+																		<span className="text-gray-400">Buyer Confirmed:</span>
+																		<p className={transaction.buyerConfirmed ? 'text-green-500' : 'text-gray-400'}>
+																			{transaction.buyerConfirmed ? 'Yes' : 'No'}
+																		</p>
+																	</div>
+																</div>
+															</div>
+														</div>
+													)
+												})}
 											</div>
 										)}
 									</div>

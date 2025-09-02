@@ -7,16 +7,7 @@ import { useAuth } from '@/app/context/AuthContext'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { ArrowLeft, Send, User, MessageCircle, Loader2 } from 'lucide-react'
 import Link from 'next/link'
-import { 
-  collection, 
-  addDoc, 
-  query, 
-  where, 
-  orderBy, 
-  onSnapshot, 
-  serverTimestamp 
-} from 'firebase/firestore'
-import { db } from '@/app/lib/firebase'
+import { useMessages } from '@/app/hooks/useMessages'
 
 export default function MessagesPage() {
   const { currentUser: user } = useAuth()
@@ -27,77 +18,49 @@ export default function MessagesPage() {
   const listingId = searchParams?.get('listingId')
   const conversationWith = searchParams?.get('conversationWith')
 
-  const [messages, setMessages] = useState([])
-  const [loading, setLoading] = useState(true)
+  const { messages, loading, sendMessage, markMessagesAsRead } = useMessages(listingId, conversationWith)
+  
   const [sending, setSending] = useState(false)
   const [newMessage, setNewMessage] = useState('')
   const [conversationUser, setConversationUser] = useState(null)
   const [listing, setListing] = useState(null)
 
   useEffect(() => {
-    if (user && listingId && conversationWith) {
-      // Set up real-time listener for messages
-      const messagesRef = collection(db, 'messages')
-      const q = query(
-        messagesRef,
-        where('listingId', '==', listingId),
-        where('participants', 'array-contains-any', [user.uid, conversationWith]),
-        orderBy('createdAt', 'asc')
-      )
-
-      const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-        const messagesData = []
-        
-        for (const doc of querySnapshot.docs) {
-          const messageData = doc.data()
-          
-          // Only include messages between these two specific users
-          if ((messageData.senderId === user.uid && messageData.receiverId === conversationWith) ||
-              (messageData.senderId === conversationWith && messageData.receiverId === user.uid)) {
-            
-            // Get user and listing data from your existing API
-            const messageWithData = {
-              id: doc.id,
-              ...messageData,
-              createdAt: messageData.createdAt?.toDate?.() || new Date(messageData.createdAt)
-            }
-            
-            messagesData.push(messageWithData)
-          }
-        }
-
-        setMessages(messagesData)
-        
-        // Get conversation user and listing info from the first message
-        if (messagesData.length > 0) {
-          await fetchAdditionalData(messagesData[0])
-        }
-        
-        setLoading(false)
-      }, (error) => {
-        console.error('Error listening to messages:', error)
-        setLoading(false)
-      })
-
-      return () => unsubscribe()
-    }
-  }, [user, listingId, conversationWith])
-
-  useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  const fetchAdditionalData = async (firstMessage) => {
+  useEffect(() => {
+    if (user && listingId && conversationWith) {
+      fetchAdditionalData()
+      
+      // Mark messages as read when the component mounts or messages change
+      if (messages.length > 0) {
+        markMessagesAsRead()
+      }
+    }
+  }, [user, listingId, conversationWith, messages.length])
+
+  const fetchAdditionalData = async () => {
     try {
+      const token = await user.getIdToken()
+      
       // Get conversation user data
-      const userResponse = await fetch(`/api/users/${conversationWith}`)
+      const userResponse = await fetch(`/api/users/${conversationWith}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      })
       if (userResponse.ok) {
         const userData = await userResponse.json()
         setConversationUser(userData)
       }
 
       // Get listing data
-      const listingResponse = await fetch(`/api/listings/${listingId}`)
+      const listingResponse = await fetch(`/api/listings/${listingId}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      })
       if (listingResponse.ok) {
         const listingData = await listingResponse.json()
         setListing(listingData)
@@ -111,27 +74,21 @@ export default function MessagesPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }
 
-  const sendMessage = async (e) => {
+  const handleSendMessage = async (e) => {
     e.preventDefault()
     if (!newMessage.trim() || sending) return
 
     setSending(true)
     try {
-      // Add message to Firestore directly for real-time update
-      await addDoc(collection(db, 'messages'), {
-        content: newMessage.trim(),
-        senderId: user.uid,
-        receiverId: conversationWith,
-        listingId: listingId,
-        participants: [user.uid, conversationWith],
-        createdAt: serverTimestamp(),
-        isRead: false
-      })
-
-      setNewMessage('')
+      const success = await sendMessage(newMessage.trim())
+      if (success) {
+        setNewMessage('')
+      } else {
+        alert('Failed to send message. Please try again.')
+      }
     } catch (error) {
       console.error('Error sending message:', error)
-      alert('Failed to send message')
+      alert(`Failed to send message: ${error.message}`)
     } finally {
       setSending(false)
     }
@@ -290,6 +247,9 @@ export default function MessagesPage() {
                     <p className={`text-xs mt-1 ${isOwn ? 'text-blue-200' : 'text-gray-400'
                       }`}>
                       {formatMessageTime(message.createdAt)}
+                      {isOwn && message.isRead && (
+                        <span className="ml-1 text-green-400">✓</span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -301,7 +261,7 @@ export default function MessagesPage() {
 
         {/* Message Input */}
         <div className="p-4 border-t border-gray-700">
-          <form onSubmit={sendMessage} className="flex items-center space-x-4">
+          <form onSubmit={handleSendMessage} className="flex items-center space-x-4">
             <div className="flex-1">
               <input
                 type="text"

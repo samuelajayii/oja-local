@@ -129,27 +129,36 @@ export default function ListingDetailPage() {
 
       setSendingMessage(true)
       try {
-         // Import Firestore functions dynamically
-         const { collection, addDoc, serverTimestamp } = await import('firebase/firestore')
-         const { db } = await import('@/app/lib/firebase')
-         
-         // Add message directly to Firestore
-         await addDoc(collection(db, 'messages'), {
-            content: message.trim(),
-            senderId: user.uid,
-            receiverId: listing.user.id,
-            listingId: listing.id,
-            participants: [user.uid, listing.user.id],
-            createdAt: serverTimestamp(),
-            isRead: false
+         const token = await user.getIdToken()
+
+         // Use your conversation API instead of directly adding to Firestore
+         const response = await fetch('/api/messages', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+               'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+               content: message.trim(),
+               receiverId: listing.user.id,
+               listingId: listing.id
+            })
          })
-         
-         setMessage('')
-         setShowMessageModal(false)
-         alert('Message sent successfully!')
+
+         if (response.ok) {
+            setMessage('')
+            setShowMessageModal(false)
+            alert('Message sent successfully!')
+
+            // Optionally redirect to the conversation
+            router.push(`/messages?listingId=${listing.id}&conversationWith=${listing.user.id}`)
+         } else {
+            const errorData = await response.json()
+            throw new Error(errorData.error || 'Failed to send message')
+         }
       } catch (error) {
          console.error('Error sending message:', error)
-         alert('Failed to send message')
+         alert(`Failed to send message: ${error.message}`)
       } finally {
          setSendingMessage(false)
       }

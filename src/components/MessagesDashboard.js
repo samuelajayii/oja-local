@@ -9,7 +9,23 @@ export default function MessagesDashboard() {
   const { conversations, loading, error } = useConversations()
 
   const formatLastMessageTime = (timestamp) => {
-    const date = new Date(timestamp)
+    if (!timestamp) return ''
+
+    // Handle various timestamp formats
+    let date
+    if (timestamp instanceof Date) {
+      date = timestamp
+    } else if (timestamp.toDate) {
+      // Firestore timestamp
+      date = timestamp.toDate()
+    } else if (timestamp._seconds) {
+      // Firestore timestamp alternative format
+      date = new Date(timestamp._seconds * 1000)
+    } else {
+      // String timestamp
+      date = new Date(timestamp)
+    }
+
     const now = new Date()
     const diffInMs = now - date
     const diffInHours = diffInMs / (1000 * 60 * 60)
@@ -75,74 +91,90 @@ export default function MessagesDashboard() {
         </div>
       ) : (
         <div className="space-y-3">
-          {conversations.map((conversation) => (
-            <Link
-              key={conversation.id}
-              href={`/messages?listingId=${conversation.listingId}&conversationWith=${conversation.partnerId}`}
-              className="block bg-[#000814] hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700"
-            >
-              <div className="flex items-center space-x-4">
-                {/* Partner Avatar */}
-                <div className="flex-shrink-0">
-                  {conversation.partner?.avatar ? (
-                    <img
-                      src={conversation.partner.avatar}
-                      alt={conversation.partner.name}
-                      className="w-12 h-12 rounded-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-gray-300" />
-                    </div>
-                  )}
-                </div>
+          {conversations.map((conversation) => {
+            // Partner ID is now directly available from the API response
+            const partnerId = conversation.partner?.id
 
-                {/* Conversation Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-white font-medium truncate">
-                      {conversation.partner?.name || 'Unknown User'}
-                    </h3>
-                    <div className="flex items-center space-x-2">
-                      {conversation.unreadCount > 0 && (
-                        <span className="bg-blue-600 text-white text-xs font-semibold px-2 py-1 rounded-full">
-                          {conversation.unreadCount}
-                        </span>
-                      )}
-                      <span className="text-xs text-gray-400 flex items-center">
-                        <Clock className="w-3 h-3 mr-1" />
-                        {formatLastMessageTime(conversation.lastMessage.createdAt)}
-                      </span>
-                    </div>
-                  </div>
+            if (!partnerId) {
+              console.warn('Missing partner ID for conversation:', conversation.id)
+              return null
+            }
 
-                  {/* Listing Title */}
-                  {conversation.listing && (
-                    <p className="text-sm text-blue-400 mb-2 truncate">
-                      About: {conversation.listing.title}
-                    </p>
-                  )}
-
-                  {/* Last Message */}
-                  <p className="text-sm text-gray-300 truncate">
-                    {conversation.lastMessage.senderId === conversation.partnerId ? '' : 'You: '}
-                    {conversation.lastMessage.content}
-                  </p>
-                </div>
-
-                {/* Listing Thumbnail */}
-                {conversation.listing?.images?.[0] && (
+            return (
+              <Link
+                key={conversation.id}
+                href={`/messages?listingId=${conversation.listingId}&conversationWith=${partnerId}`}
+                className="block bg-[#000814] hover:bg-gray-800 rounded-lg p-4 transition-colors border border-gray-700"
+              >
+                <div className="flex items-center space-x-4">
+                  {/* Partner Avatar */}
                   <div className="flex-shrink-0">
-                    <img
-                      src={conversation.listing.images[0]}
-                      alt={conversation.listing.title}
-                      className="w-12 h-12 rounded object-cover"
-                    />
+                    {conversation.partner?.avatar ? (
+                      <img
+                        src={conversation.partner.avatar}
+                        alt={conversation.partner.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-gray-700 rounded-full flex items-center justify-center">
+                        <User className="w-6 h-6 text-gray-300" />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </Link>
-          ))}
+
+                  {/* Conversation Info */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="text-white font-medium truncate">
+                        {conversation.partner?.name || 'Unknown User'}
+                      </h3>
+                      <div className="flex items-center space-x-2">
+                        {conversation.unreadCount > 0 && (
+                          <span className="bg-blue-600 text-white text-xs font-semibold px-2 py-1 rounded-full">
+                            {conversation.unreadCount}
+                          </span>
+                        )}
+                        <span className="text-xs text-gray-400 flex items-center">
+                          <Clock className="w-3 h-3 mr-1" />
+                          {formatLastMessageTime(conversation.lastMessage?.createdAt || conversation.updatedAt)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Listing Title */}
+                    {conversation.listing && (
+                      <p className="text-sm text-blue-400 mb-2 truncate">
+                        About: {conversation.listing.title}
+                      </p>
+                    )}
+
+                    {/* Last Message */}
+                    <p className="text-sm text-gray-300 truncate">
+                      {conversation.lastMessage ? (
+                        <>
+                          {conversation.lastMessage.senderId === partnerId ? '' : 'You: '}
+                          {conversation.lastMessage.content}
+                        </>
+                      ) : (
+                        'No messages yet'
+                      )}
+                    </p>
+                  </div>
+
+                  {/* Listing Thumbnail */}
+                  {conversation.listing?.images?.[0] && (
+                    <div className="flex-shrink-0">
+                      <img
+                        src={conversation.listing.images[0]}
+                        alt={conversation.listing.title}
+                        className="w-12 h-12 rounded object-cover"
+                      />
+                    </div>
+                  )}
+                </div>
+              </Link>
+            )
+          }).filter(Boolean)}
         </div>
       )}
     </div>

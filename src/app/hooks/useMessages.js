@@ -1,24 +1,31 @@
 // app/hooks/useMessages.js
 'use client'
 
-import { useState, useEffect } from 'react'
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot,
-  addDoc,
-  serverTimestamp
-} from 'firebase/firestore'
-import { db } from '@/app/lib/firebase'
+import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/app/context/AuthContext'
+
+// Helper function to generate conversation ID
+const getConversationId = (userId1, userId2, listingId) => {
+  const sortedUsers = [userId1, userId2].sort()
+  return `${listingId}_${sortedUsers[0]}_${sortedUsers[1]}`
+}
+
+// Helper function to safely convert timestamps
+const convertTimestamp = (timestamp) => {
+  if (!timestamp) return new Date()
+  if (timestamp instanceof Date) return timestamp
+  if (timestamp.toDate) return timestamp.toDate()
+  if (timestamp._seconds) return new Date(timestamp._seconds * 1000)
+  return new Date(timestamp)
+}
 
 export function useMessages(listingId, conversationWith) {
   const { currentUser: user } = useAuth()
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [conversationId, setConversationId] = useState(null)
+  const intervalRef = useRef(null)
 
   useEffect(() => {
     if (!user || !listingId || !conversationWith) {
@@ -26,60 +33,122 @@ export function useMessages(listingId, conversationWith) {
       return
     }
 
-    const messagesRef = collection(db, 'messages')
-    const q = query(
-      messagesRef,
-      where('listingId', '==', listingId),
-      where('participants', 'array-contains-any', [user.uid, conversationWith]),
-      orderBy('createdAt', 'asc')
-    )
+    const convId = getConversationId(user.uid, conversationWith, listingId)
+    setConversationId(convId)
 
-    const unsubscribe = onSnapshot(q, (querySnapshot) => {
-      const messagesData = []
+    const fetchMessages = async () => {
+      try {
+        const token = await user.getIdToken()
+        const response = await fetch(`/api/messages?listingId=${listingId}&conversationWith=${conversationWith}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }
+        })
 
-      querySnapshot.forEach((doc) => {
-        const messageData = doc.data()
+        if (response.ok) {
+          const messagesData = await response.json()
 
-        // Only include messages between these two specific users
-        if ((messageData.senderId === user.uid && messageData.receiverId === conversationWith) ||
-          (messageData.senderId === conversationWith && messageData.receiverId === user.uid)) {
+          // Ensure all timestamps are properly converted
+          const processedMessages = messagesData.map(message => ({
+            ...message,
+            createdAt: convertTimestamp(message.createdAt)
+          }))
 
-          messagesData.push({
-            id: doc.id,
-            ...messageData,
-            createdAt: messageData.createdAt?.toDate?.() || new Date(messageData.createdAt)
-          })
+          setMessages(processedMessages)
+          setError(null)
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+          setError(errorData.error || 'Failed to fetch messages')
         }
-      })
+      } catch (err) {
+        console.error('Error fetching messages:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
 
-      setMessages(messagesData)
-      setLoading(false)
-    }, (err) => {
-      console.error('Error listening to messages:', err)
-      setError(err.message)
-      setLoading(false)
-    })
+    // Initial fetch
+    fetchMessages()
 
-    return () => unsubscribe()
+    // Set up polling for real-time updates (every 2 seconds)
+    intervalRef.current = setInterval(fetchMessages, 2000)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
   }, [user, listingId, conversationWith])
 
   const sendMessage = async (content) => {
-    if (!user || !content.trim()) return false
+    if (!user || !content.trim() || !conversationId) return false
 
     try {
-      await addDoc(collection(db, 'messages'), {
-        content: content.trim(),
-        senderId: user.uid,
-        receiverId: conversationWith,
-        listingId: listingId,
-        participants: [user.uid, conversationWith],
-        createdAt: serverTimestamp(),
-        isRead: false
+      const token = await user.getIdToken()
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          content: content.trim(),
+          receiverId: conversationWith,
+          listingId: listingId
+        })
       })
-      return true
+
+      if (response.ok) {
+        // Immediately fetch updated messages instead of manual state update
+        const messagesResponse = await fetch(`/api/messages?listingId=${listingId}&conversationWith=${conversationWith}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          }
+        })
+
+        if (messagesResponse.ok) {
+          const updatedMessages = await messagesResponse.json()
+          const processedMessages = updatedMessages.map(message => ({
+            ...message,
+            createdAt: convertTimestamp(message.createdAt)
+          }))
+          setMessages(processedMessages)
+        }
+
+        return true
+      } else {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(errorData.error || 'Failed to send message')
+      }
     } catch (error) {
       console.error('Error sending message:', error)
+      setError(error.message)
       return false
+    }
+  }
+
+  const markMessagesAsRead = async () => {
+    if (!conversationId || !user) return
+
+    try {
+      const token = await user.getIdToken()
+      const response = await fetch('/api/messages', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          conversationId: conversationId
+        })
+      })
+
+      if (!response.ok) {
+        console.error('Failed to mark messages as read')
+      }
+    } catch (error) {
+      console.error('Error marking messages as read:', error)
     }
   }
 
@@ -87,7 +156,9 @@ export function useMessages(listingId, conversationWith) {
     messages,
     loading,
     error,
-    sendMessage
+    sendMessage,
+    markMessagesAsRead,
+    conversationId
   }
 }
 
@@ -96,6 +167,7 @@ export function useConversations() {
   const [conversations, setConversations] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const intervalRef = useRef(null)
 
   useEffect(() => {
     if (!user) {
@@ -103,82 +175,76 @@ export function useConversations() {
       return
     }
 
-    const messagesRef = collection(db, 'messages')
-    const q = query(
-      messagesRef,
-      where('participants', 'array-contains', user.uid),
-      orderBy('createdAt', 'desc')
-    )
-
-    const unsubscribe = onSnapshot(q, async (querySnapshot) => {
-      const conversationsMap = new Map()
-
-      querySnapshot.forEach((doc) => {
-        const messageData = doc.data()
-        const partnerId = messageData.senderId === user.uid ? messageData.receiverId : messageData.senderId
-        const key = `${messageData.listingId}-${partnerId}`
-
-        if (!conversationsMap.has(key)) {
-          conversationsMap.set(key, {
-            id: key,
-            listingId: messageData.listingId,
-            partnerId,
-            lastMessage: {
-              id: doc.id,
-              ...messageData,
-              createdAt: messageData.createdAt?.toDate?.() || new Date(messageData.createdAt)
-            },
-            unreadCount: 0
-          })
-        }
-
-        // Count unread messages
-        if (messageData.receiverId === user.uid && !messageData.isRead) {
-          const conversation = conversationsMap.get(key)
-          conversation.unreadCount++
-        }
-      })
-
-      const conversationsArray = Array.from(conversationsMap.values())
-
-      // Fetch additional data for each conversation
-      const conversationsWithData = await Promise.all(
-        conversationsArray.map(async (conv) => {
-          try {
-            // Get partner data
-            const partnerResponse = await fetch(`/api/users/${conv.partnerId}`)
-            const partner = partnerResponse.ok ? await partnerResponse.json() : null
-
-            // Get listing data
-            const listingResponse = await fetch(`/api/listings/${conv.listingId}`)
-            const listing = listingResponse.ok ? await listingResponse.json() : null
-
-            return {
-              ...conv,
-              partner,
-              listing
-            }
-          } catch (error) {
-            console.error('Error fetching conversation data:', error)
-            return conv
+    const fetchConversations = async () => {
+      try {
+        const token = await user.getIdToken()
+        const response = await fetch('/api/messages', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
           }
         })
-      )
 
-      setConversations(conversationsWithData)
-      setLoading(false)
-    }, (err) => {
-      console.error('Error listening to conversations:', err)
-      setError(err.message)
-      setLoading(false)
-    })
+        if (response.ok) {
+          const conversationsData = await response.json()
 
-    return () => unsubscribe()
+          // Ensure all timestamps are properly converted
+          const processedConversations = conversationsData.map(conversation => ({
+            ...conversation,
+            updatedAt: convertTimestamp(conversation.updatedAt),
+            lastMessage: conversation.lastMessage ? {
+              ...conversation.lastMessage,
+              createdAt: convertTimestamp(conversation.lastMessage.createdAt)
+            } : null
+          }))
+
+          setConversations(processedConversations)
+          setError(null)
+        } else {
+          const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+          setError(errorData.error || 'Failed to fetch conversations')
+        }
+      } catch (err) {
+        console.error('Error fetching conversations:', err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    // Initial fetch
+    fetchConversations()
+
+    // Set up polling for real-time updates (every 5 seconds for conversations list)
+    intervalRef.current = setInterval(fetchConversations, 5000)
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
   }, [user])
 
   return {
     conversations,
     loading,
     error
+  }
+}
+
+// Helper function to migrate existing messages to conversation format
+export async function migrateMessagesToConversations() {
+  try {
+    // This function is no longer needed as we're using the API-based approach
+    console.log('Migration not needed - using API-based approach')
+    return {
+      success: true,
+      migratedCount: 0
+    }
+  } catch (error) {
+    console.error('Migration error:', error)
+    return {
+      success: false,
+      error: error.message
+    }
   }
 }

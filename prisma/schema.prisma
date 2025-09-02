@@ -8,28 +8,22 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-enum ListingStatus {
-  ACTIVE
-  SOLD
-  DRAFT
-}
-
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  avatar    String?
-  bio       String?
-  location  String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  
-  // Relations
-  listings        Listing[]
-  sentMessages    Message[] @relation("SentMessages")
-  receivedMessages Message[] @relation("ReceivedMessages")
-  favorites       Favorite[]
-  
+  id                                            String          @id @default(cuid())
+  email                                         String          @unique
+  name                                          String?
+  createdAt                                     DateTime        @default(now())
+  updatedAt                                     DateTime        @updatedAt
+  avatar                                        String?
+  bio                                           String?
+  location                                      String?
+  favorites                                     Favorite[]
+  listings                                      Listing[]
+  receivedMessages                              Message[]       @relation("ReceivedMessages")
+  sentMessages                                  Message[]       @relation("SentMessages")
+  notifications_notifications_fromUserIdTousers notifications[] @relation("notifications_fromUserIdTousers")
+  notifications_notifications_userIdTousers     notifications[] @relation("notifications_userIdTousers")
+
   @@map("users")
 }
 
@@ -38,29 +32,28 @@ model Category {
   name     String    @unique
   slug     String    @unique
   listings Listing[]
-  
+
   @@map("categories")
 }
 
 model Listing {
-  id          String        @id @default(cuid())
-  title       String
-  description String
-  price       Decimal?
-  images      String[] // URLs to uploaded images
-  location    String?
-  status      ListingStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  
-  // Relations
-  userId     String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  categoryId String
-  category   Category @relation(fields: [categoryId], references: [id])
-  messages   Message[]
-  favorites  Favorite[]
-  
+  id            String          @id @default(cuid())
+  title         String
+  description   String
+  price         Decimal?
+  images        String[]
+  status        ListingStatus   @default(ACTIVE)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  userId        String
+  categoryId    String
+  location      String?
+  favorites     Favorite[]
+  category      Category        @relation(fields: [categoryId], references: [id])
+  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages      Message[]
+  notifications notifications[]
+
   @@index([status, createdAt])
   @@index([categoryId])
   @@index([userId])
@@ -70,31 +63,63 @@ model Listing {
 model Favorite {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
-  
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   listingId String
   listing   Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@unique([userId, listingId])
   @@map("favorites")
 }
 
 model Message {
-  id        String   @id @default(cuid())
-  content   String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
-  
-  // Relations
+  id         String   @id @default(cuid())
+  content    String
+  createdAt  DateTime @default(now())
   senderId   String
-  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiverId String
-  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
   listingId  String
+  isRead     Boolean  @default(false)
+  receiverId String
   listing    Listing  @relation(fields: [listingId], references: [id], onDelete: Cascade)
-  
+  receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+
   @@index([receiverId, isRead])
   @@index([listingId])
   @@map("messages")
+}
+
+model notifications {
+  id                                    String           @id
+  type                                  NotificationType
+  title                                 String
+  message                               String
+  read                                  Boolean          @default(false)
+  readAt                                DateTime?
+  actionUrl                             String?
+  createdAt                             DateTime         @default(now())
+  updatedAt                             DateTime
+  userId                                String
+  listingId                             String?
+  fromUserId                            String?
+  users_notifications_fromUserIdTousers User?            @relation("notifications_fromUserIdTousers", fields: [fromUserId], references: [id], onDelete: Cascade)
+  listings                              Listing?         @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  users_notifications_userIdTousers     User             @relation("notifications_userIdTousers", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([userId, read])
+}
+
+enum ListingStatus {
+  ACTIVE
+  SOLD
+  DRAFT
+}
+
+enum NotificationType {
+  MESSAGE
+  FAVORITE
+  PRICE_DROP
+  LISTING_UPDATE
+  USER
 }

@@ -23,6 +23,18 @@ async function main() {
         prisma.category.create({
             data: { name: 'Jewelries', slug: 'jewellries' }
         }),
+        prisma.category.create({
+            data: { name: 'Gaming', slug: 'gaming' }
+        }),
+        prisma.category.create({
+            data: { name: 'Sports', slug: 'sports' }
+        }),
+        prisma.category.create({
+            data: { name: 'Toys', slug: 'toys' }
+        }),
+        prisma.category.create({
+            data: { name: 'Other', slug: 'other' }
+        }),
     ])
 
     console.log('Created categories:', categories)

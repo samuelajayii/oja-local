@@ -1,7 +1,9 @@
+// src/app/api/listings/route.js
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/app/lib/db'
 import { verifyAuthToken } from '@/app/lib/auth-helpers'
 import { deleteImage } from '@/app/lib/storage';
+import { CacheManager } from '@/app/lib/redis';
 
 export async function GET(request) {
     try {
@@ -9,6 +11,16 @@ export async function GET(request) {
         const search = searchParams.get('search');
         const category = searchParams.get('category');
         const userId = searchParams.get('userId');
+
+        // Generate cache key
+        const cacheKey = CacheManager.keys.listings({ search, category, userId });
+        
+        // Try to get from cache first
+        const cachedListings = await CacheManager.get(cacheKey);
+        if (cachedListings) {
+            console.log('Returning cached listings');
+            return NextResponse.json(cachedListings);
+        }
 
         const whereClause = {
             AND: [
@@ -43,7 +55,7 @@ export async function GET(request) {
                 },
                 _count: {
                     select: {
-                        conversations: true, // Changed from messages to conversations
+                        conversations: true,
                         favorites: true
                     }
                 }
@@ -51,6 +63,10 @@ export async function GET(request) {
             orderBy: { createdAt: 'desc' }
         });
 
+        // Cache the results for 5 minutes (300 seconds)
+        await CacheManager.set(cacheKey, listings, 300);
+        
+        console.log('Cached fresh listings data');
         return NextResponse.json(listings);
     } catch (error) {
         console.error('Database error:', error);
@@ -110,6 +126,10 @@ export async function POST(request) {
                 }
             }
         });
+
+        // Invalidate relevant caches
+        await CacheManager.delPattern('listings:*');
+        await CacheManager.del(CacheManager.keys.userListings(user.uid));
 
         return NextResponse.json(listing);
     } catch (error) {

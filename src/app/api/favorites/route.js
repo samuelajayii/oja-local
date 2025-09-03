@@ -1,18 +1,24 @@
+// src/app/api/favorites/route.js
 import { NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { verifyAuthToken } from '@/app/lib/auth-helpers';
+import { CacheManager } from '@/app/lib/redis';
 
 export async function GET(request) {
     try {
-        console.log('GET /api/favorites - Starting request');
-
         const user = await verifyAuthToken(request);
         if (!user) {
-            console.log('GET /api/favorites - Unauthorized: No user found');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('GET /api/favorites - User verified:', user.uid);
+        const cacheKey = CacheManager.keys.favorites(user.uid);
+        
+        // Try to get from cache first
+        const cachedFavorites = await CacheManager.get(cacheKey);
+        if (cachedFavorites) {
+            console.log('Returning cached favorites');
+            return NextResponse.json(cachedFavorites);
+        }
 
         const favorites = await db.favorite.findMany({
             where: { userId: user.uid },
@@ -24,7 +30,7 @@ export async function GET(request) {
                         },
                         category: true,
                         _count: {
-                            select: { messages: true, favorites: true }
+                            select: { conversations: true, favorites: true }
                         }
                     }
                 }
@@ -32,118 +38,117 @@ export async function GET(request) {
             orderBy: { createdAt: 'desc' }
         });
 
-        console.log('GET /api/favorites - Found favorites:', favorites.length);
-        return NextResponse.json(favorites.map(fav => fav.listing));
+        const favoriteListings = favorites.map(fav => fav.listing);
+
+        // Cache favorites for 5 minutes (300 seconds)
+        await CacheManager.set(cacheKey, favoriteListings, 300);
+
+        return NextResponse.json(favoriteListings);
     } catch (error) {
-        console.error('GET /api/favorites - Database error:', error);
-        console.error('Error details:', {
-            name: error.name,
-            message: error.message,
-            code: error.code,
-            stack: error.stack
-        });
+        console.error('Database error:', error);
         return NextResponse.json({ error: 'Failed to fetch favorites' }, { status: 500 });
     }
 }
 
 export async function POST(request) {
     try {
-        console.log('POST /api/favorites - Starting request');
-
         const user = await verifyAuthToken(request);
         if (!user) {
-            console.log('POST /api/favorites - Unauthorized: No user found');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        console.log('POST /api/favorites - User verified:', user.uid);
-
-        const body = await request.json();
-        console.log('POST /api/favorites - Request body:', body);
-
-        const { listingId } = body;
+        const { listingId } = await request.json();
 
         if (!listingId) {
-            console.log('POST /api/favorites - Missing listingId');
-            return NextResponse.json({ error: 'listingId is required' }, { status: 400 });
+            return NextResponse.json({ error: 'Listing ID is required' }, { status: 400 });
         }
 
-        console.log('POST /api/favorites - Creating favorite for listing:', listingId);
-
-        // Check if the listing exists first
+        // Check if listing exists
         const listing = await db.listing.findUnique({
             where: { id: listingId }
         });
 
         if (!listing) {
-            console.log('POST /api/favorites - Listing not found:', listingId);
             return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
         }
 
-        console.log('POST /api/favorites - Listing found, creating favorite');
+        // Check if already favorited
+        const existingFavorite = await db.favorite.findUnique({
+            where: {
+                userId_listingId: {
+                    userId: user.uid,
+                    listingId: listingId
+                }
+            }
+        });
+
+        if (existingFavorite) {
+            return NextResponse.json({ error: 'Already favorited' }, { status: 409 });
+        }
 
         const favorite = await db.favorite.create({
             data: {
                 userId: user.uid,
-                listingId
+                listingId: listingId
             }
         });
 
-        console.log('POST /api/favorites - Favorite created:', favorite);
+        // Invalidate favorites cache and listing cache
+        await CacheManager.del(CacheManager.keys.favorites(user.uid));
+        await CacheManager.del(CacheManager.keys.listing(listingId));
+        await CacheManager.delPattern('listings:*'); // Listing counts changed
+
         return NextResponse.json(favorite);
     } catch (error) {
-        console.error('POST /api/favorites - Error:', error);
-        console.error('Error details:', {
-            name: error.name,
-            message: error.message,
-            code: error.code,
-            stack: error.stack
-        });
-
-        if (error.code === 'P2002') {
-            console.log('POST /api/favorites - Duplicate favorite attempt');
-            return NextResponse.json({ error: 'Already favorited' }, { status: 400 });
-        }
-
-        return NextResponse.json({
-            error: 'Failed to add favorite',
-            details: error.message
-        }, { status: 500 });
+        console.error('Add favorite error:', error);
+        return NextResponse.json({ error: 'Failed to add favorite' }, { status: 500 });
     }
 }
 
 export async function DELETE(request) {
     try {
-        console.log('DELETE /api/favorites - Starting request');
-
         const user = await verifyAuthToken(request);
         if (!user) {
-            console.log('DELETE /api/favorites - Unauthorized: No user found');
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
         const { searchParams } = new URL(request.url);
         const listingId = searchParams.get('listingId');
 
-        console.log('DELETE /api/favorites - Deleting favorite for listing:', listingId);
+        if (!listingId) {
+            return NextResponse.json({ error: 'Listing ID is required' }, { status: 400 });
+        }
 
-        await db.favorite.deleteMany({
+        const favorite = await db.favorite.findUnique({
             where: {
-                userId: user.uid,
-                listingId
+                userId_listingId: {
+                    userId: user.uid,
+                    listingId: listingId
+                }
             }
         });
 
-        console.log('DELETE /api/favorites - Favorite deleted successfully');
-        return NextResponse.json({ success: true });
-    } catch (error) {
-        console.error('DELETE /api/favorites - Error:', error);
-        console.error('Error details:', {
-            name: error.name,
-            message: error.message,
-            code: error.code,
-            stack: error.stack
+        if (!favorite) {
+            return NextResponse.json({ error: 'Favorite not found' }, { status: 404 });
+        }
+
+        await db.favorite.delete({
+            where: {
+                userId_listingId: {
+                    userId: user.uid,
+                    listingId: listingId
+                }
+            }
         });
+
+        // Invalidate favorites cache and listing cache
+        await CacheManager.del(CacheManager.keys.favorites(user.uid));
+        await CacheManager.del(CacheManager.keys.listing(listingId));
+        await CacheManager.delPattern('listings:*'); // Listing counts changed
+
+        return NextResponse.json({ message: 'Favorite removed' });
+    } catch (error) {
+        console.error('Remove favorite error:', error);
         return NextResponse.json({ error: 'Failed to remove favorite' }, { status: 500 });
     }
 }

@@ -1,10 +1,21 @@
+// src/app/api/listings/[id]/route.js
 import { NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { verifyAuthToken } from '@/app/lib/auth-helpers';
 import { deleteImage } from '@/app/lib/storage';
+import { CacheManager } from '@/app/lib/redis';
 
 export async function GET(request, { params }) {
     try {
+        const cacheKey = CacheManager.keys.listing(params.id);
+        
+        // Try to get from cache first
+        const cachedListing = await CacheManager.get(cacheKey);
+        if (cachedListing) {
+            console.log('Returning cached listing');
+            return NextResponse.json(cachedListing);
+        }
+
         const listing = await db.listing.findUnique({
             where: { id: params.id },
             include: {
@@ -19,7 +30,7 @@ export async function GET(request, { params }) {
                 category: true,
                 _count: {
                     select: {
-                        conversations: true, // Changed from messages to conversations
+                        conversations: true,
                         favorites: true
                     }
                 }
@@ -30,6 +41,9 @@ export async function GET(request, { params }) {
             return NextResponse.json({ error: 'Listing not found' }, { status: 404 });
         }
 
+        // Cache the listing for 10 minutes (600 seconds)
+        await CacheManager.set(cacheKey, listing, 600);
+        
         return NextResponse.json(listing);
     } catch (error) {
         console.error('Database error:', error);
@@ -65,10 +79,17 @@ export async function DELETE(request, { params }) {
             );
         }
 
-        // Delete listing from database (this will cascade delete conversations and messages)
+        // Delete listing from database
         await db.listing.delete({
             where: { id: params.id }
         });
+
+        // Invalidate caches
+        await CacheManager.del(CacheManager.keys.listing(params.id));
+        await CacheManager.delPattern('listings:*');
+        await CacheManager.del(CacheManager.keys.userListings(user.uid));
+        await CacheManager.delPattern(`conversation:*${params.id}*`);
+        await CacheManager.delPattern(`messages:*${params.id}*`);
 
         return NextResponse.json({ message: 'Listing deleted successfully' });
     } catch (error) {
@@ -124,6 +145,11 @@ export async function PUT(request, { params }) {
                 }
             }
         });
+
+        // Invalidate caches
+        await CacheManager.del(CacheManager.keys.listing(params.id));
+        await CacheManager.delPattern('listings:*');
+        await CacheManager.del(CacheManager.keys.userListings(user.uid));
 
         return NextResponse.json(updatedListing);
     } catch (error) {

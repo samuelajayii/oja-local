@@ -1,8 +1,10 @@
+// src/app/api/messages/route.js
 import { NextResponse } from 'next/server';
 import { verifyAuthToken } from '@/app/lib/auth-helpers';
-import { db } from '@/app/lib/db'; // Keep for listings and user data
-import { db as firestore } from '@/app/lib/firebase-admin'; // Use admin SDK
+import { db } from '@/app/lib/db';
+import { db as firestore } from '@/app/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { CacheManager } from '@/app/lib/redis';
 
 // Helper function to generate conversation ID
 const getConversationId = (userId1, userId2, listingId) => {
@@ -32,6 +34,15 @@ export async function GET(request) {
     if (listingId && conversationWith) {
       // Get specific conversation messages
       const conversationId = getConversationId(user.uid, conversationWith, listingId);
+      const cacheKey = CacheManager.keys.messages(conversationId);
+      
+      // Try to get from cache first
+      const cachedMessages = await CacheManager.get(cacheKey);
+      if (cachedMessages) {
+        console.log('Returning cached messages');
+        return NextResponse.json(cachedMessages);
+      }
+
       const conversationRef = firestore.collection('conversations').doc(conversationId);
       const conversationDoc = await conversationRef.get();
 
@@ -77,10 +88,22 @@ export async function GET(request) {
       // Sort messages by creation time
       enhancedMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
+      // Cache messages for 2 minutes (120 seconds) - shorter TTL for real-time data
+      await CacheManager.set(cacheKey, enhancedMessages, 120);
+
       return NextResponse.json(enhancedMessages);
     }
 
     // Get all conversations for the user
+    const userConversationsCacheKey = CacheManager.keys.userConversations(user.uid);
+    
+    // Try to get from cache first
+    const cachedConversations = await CacheManager.get(userConversationsCacheKey);
+    if (cachedConversations) {
+      console.log('Returning cached conversations');
+      return NextResponse.json(cachedConversations);
+    }
+
     const conversationsRef = firestore.collection('conversations');
     const q = conversationsRef
       .where('participants', 'array-contains', user.uid);
@@ -106,22 +129,40 @@ export async function GET(request) {
           continue;
         }
 
-        // Get partner info from PostgreSQL
-        const partner = await db.user.findUnique({
-          where: { id: partnerId },
-          select: { id: true, name: true, avatar: true }
-        });
+        // Get partner info from PostgreSQL (with caching)
+        const partnerCacheKey = CacheManager.keys.user(partnerId);
+        let partner = await CacheManager.get(partnerCacheKey);
+        
+        if (!partner) {
+          partner = await db.user.findUnique({
+            where: { id: partnerId },
+            select: { id: true, name: true, avatar: true }
+          });
+          
+          if (partner) {
+            await CacheManager.set(partnerCacheKey, partner, 600); // Cache for 10 minutes
+          }
+        }
 
         if (!partner) {
           console.warn(`Partner user not found: ${partnerId}`);
           continue;
         }
 
-        // Get listing info from PostgreSQL
-        const listing = await db.listing.findUnique({
-          where: { id: conversationData.listingId },
-          select: { id: true, title: true, images: true }
-        });
+        // Get listing info from PostgreSQL (with caching)
+        const listingCacheKey = CacheManager.keys.listing(conversationData.listingId);
+        let listing = await CacheManager.get(listingCacheKey);
+        
+        if (!listing) {
+          listing = await db.listing.findUnique({
+            where: { id: conversationData.listingId },
+            select: { id: true, title: true, images: true }
+          });
+          
+          if (listing) {
+            await CacheManager.set(listingCacheKey, listing, 600); // Cache for 10 minutes
+          }
+        }
 
         if (!listing) {
           console.warn(`Listing not found: ${conversationData.listingId}`);
@@ -156,6 +197,9 @@ export async function GET(request) {
       const bTime = b.lastMessage?.createdAt || b.updatedAt;
       return new Date(bTime) - new Date(aTime);
     });
+
+    // Cache conversations for 1 minute (60 seconds) - shorter TTL for real-time data
+    await CacheManager.set(userConversationsCacheKey, conversations, 60);
 
     return NextResponse.json(conversations);
   } catch (error) {
@@ -200,8 +244,8 @@ export async function POST(request) {
     }
 
     // Determine who is user1 (listing owner) and user2 (the other person)
-    const user1Id = listing.userId; // Always the listing owner
-    const user2Id = user.uid === listing.userId ? receiverId : user.uid; // The other person
+    const user1Id = listing.userId;
+    const user2Id = user.uid === listing.userId ? receiverId : user.uid;
 
     // Generate conversation ID
     const conversationId = getConversationId(user1Id, user2Id, listingId);
@@ -236,15 +280,14 @@ export async function POST(request) {
           data: {
             id: conversationId,
             listingId: listingId,
-            user1Id: user1Id, // Listing owner
-            user2Id: user2Id, // Other person
+            user1Id: user1Id,
+            user2Id: user2Id,
             lastMessageAt: now
           }
         });
         console.log(`Created new conversation: ${conversationId}`);
       } catch (createError) {
         if (createError.code === 'P2002') {
-          // Handle race condition - conversation was created by another request
           conversation = await db.conversation.findUnique({
             where: {
               listingId_user1Id_user2Id: {
@@ -271,7 +314,6 @@ export async function POST(request) {
       const conversationDoc = await transaction.get(conversationRef);
       
       if (conversationDoc.exists) {
-        // Update existing conversation
         const currentData = conversationDoc.data();
         const currentMessages = currentData.messages || [];
         
@@ -283,7 +325,6 @@ export async function POST(request) {
           updatedAt: FieldValue.serverTimestamp()
         });
       } else {
-        // Create new conversation in Firestore
         transaction.set(conversationRef, {
           id: conversationId,
           listingId: listingId,
@@ -297,6 +338,12 @@ export async function POST(request) {
         });
       }
     });
+
+    // Invalidate caches for both users
+    await CacheManager.del(CacheManager.keys.messages(conversationId));
+    await CacheManager.del(CacheManager.keys.userConversations(user.uid));
+    await CacheManager.del(CacheManager.keys.userConversations(receiverId));
+    await CacheManager.del(CacheManager.keys.conversation(conversationId));
 
     // Get sender info for response
     const sender = await db.user.findUnique({
@@ -363,6 +410,11 @@ export async function PUT(request) {
         updatedAt: FieldValue.serverTimestamp()
       });
     });
+
+    // Invalidate relevant caches
+    await CacheManager.del(CacheManager.keys.messages(conversationId));
+    await CacheManager.del(CacheManager.keys.userConversations(user.uid));
+    await CacheManager.del(CacheManager.keys.conversation(conversationId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

@@ -3,6 +3,12 @@ import "../globals.css";
 import Header from "@/components/Header";
 import { AuthProvider } from "../context/AuthContext";
 import Footer from "@/components/Footer";
+import { CacheWarming } from '@/app/lib/cache-warming';
+
+// In your root layout or app initialization
+if (process.env.NODE_ENV === 'production') {
+  CacheWarming.scheduleWarming();
+}
 
 const geistSans = Geist({
   variable: "--font-geist-sans",

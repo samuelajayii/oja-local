@@ -366,8 +366,8 @@ export default function UserDashboard() {
 												<div className="bg-gray-700 rounded-full p-6 w-24 h-24 mx-auto mb-4 flex items-center justify-center">
 													<Plus className="w-12 h-12 text-gray-300" />
 												</div>
-												<h3 className="text-lg font-semibold mb-2">No listings yet</h3>
-												<p className="text-gray-300 mb-6">Start selling by creating your first listing.</p>
+												<h3 className="text-lg font-semibold mb-2">No listings</h3>
+												<p className="text-gray-300 mb-6">Start selling by a listing.</p>
 												<Link
 													href="/listings/create"
 													className="bg-[#00154B] text-white px-6 py-2 rounded-lg hover:bg-[#00296B]"

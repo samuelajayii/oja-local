@@ -5,7 +5,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useAuth } from '@/app/context/AuthContext'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { ArrowLeft, Send, User, MessageCircle, Loader2, CreditCard, CheckCircle, Clock, XCircle, DollarSign } from 'lucide-react'
+import { ArrowLeft, Send, User, MessageCircle, Loader2, CreditCard, CheckCircle, Clock, XCircle, DollarSign, X } from 'lucide-react'
 import Link from 'next/link'
 import { useMessages } from '@/app/hooks/useMessages'
 
@@ -25,7 +25,8 @@ export default function MessagesPage() {
   const [conversationUser, setConversationUser] = useState(null)
   const [listing, setListing] = useState(null)
   const [transaction, setTransaction] = useState(null)
-  const [showTransactionForm, setShowTransactionForm] = useState(false)
+  const [showTransactionModal, setShowTransactionModal] = useState(false)
+  const [transactionModalType, setTransactionModalType] = useState('') // 'create', 'status'
   const [agreedPrice, setAgreedPrice] = useState('')
   const [creatingTransaction, setCreatingTransaction] = useState(false)
   const [confirmingTransaction, setConfirmingTransaction] = useState(false)
@@ -136,7 +137,8 @@ export default function MessagesPage() {
       if (response.ok) {
         const newTransaction = await response.json()
         setTransaction(newTransaction)
-        setShowTransactionForm(false)
+        setShowTransactionModal(false)
+        setTransactionModalType('')
         alert('Transaction initiated successfully!')
       } else {
         const err = await response.json().catch(() => ({}))
@@ -164,6 +166,8 @@ export default function MessagesPage() {
       if (response.ok) {
         const result = await response.json()
         setTransaction(result.transaction)
+        setShowTransactionModal(false)
+        setTransactionModalType('')
         alert(result.message)
       } else {
         const err = await response.json().catch(() => ({}))
@@ -189,6 +193,8 @@ export default function MessagesPage() {
 
       if (response.ok) {
         setTransaction(null)
+        setShowTransactionModal(false)
+        setTransactionModalType('')
         alert('Transaction cancelled successfully')
       } else {
         const err = await response.json().catch(() => ({}))
@@ -198,6 +204,16 @@ export default function MessagesPage() {
       console.error('Error cancelling transaction:', error)
       alert('Failed to cancel transaction')
     }
+  }
+
+  const openTransactionModal = (type) => {
+    setTransactionModalType(type)
+    setShowTransactionModal(true)
+  }
+
+  const closeTransactionModal = () => {
+    setShowTransactionModal(false)
+    setTransactionModalType('')
   }
 
   const getStatusIcon = (status) => {
@@ -339,14 +355,24 @@ export default function MessagesPage() {
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* Transaction Action Button */}
+              {/* Transaction Action Buttons */}
               {canInitiateTransaction() && (
                 <button
-                  onClick={() => setShowTransactionForm(true)}
+                  onClick={() => openTransactionModal('create')}
                   className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm flex items-center"
                 >
                   <DollarSign className="w-4 h-4 mr-1" />
                   Start Transaction
+                </button>
+              )}
+
+              {transaction && (
+                <button
+                  onClick={() => openTransactionModal('status')}
+                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm flex items-center"
+                >
+                  {getStatusIcon(transaction.status)}
+                  <span className="ml-1">Transaction</span>
                 </button>
               )}
 
@@ -387,129 +413,6 @@ export default function MessagesPage() {
                   <p className="text-sm text-green-500 font-semibold">${parseFloat(listing.price).toFixed(2)}</p>
                 )}
               </div>
-            </div>
-          </div>
-        )}
-
-        {/* Transaction Status */}
-        {transaction && (
-          <div className="p-4 border-b border-gray-700">
-            <div className="bg-[#001020] rounded-lg p-4">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center space-x-2">
-                  {getStatusIcon(transaction.status)}
-                  <h4 className="font-semibold">Transaction Status</h4>
-                </div>
-                <span className="text-lg font-bold text-green-500">
-                  ${parseFloat(transaction.agreedPrice).toFixed(2)}
-                </span>
-              </div>
-
-              <p className="text-sm text-gray-300 mb-3">{getStatusText(transaction)}</p>
-
-              <div className="grid grid-cols-2 gap-4 text-xs text-gray-400 mb-4">
-                <div>
-                  <span>Seller Confirmed:</span>
-                  <span className={`ml-2 ${transaction.sellerConfirmed ? 'text-green-500' : 'text-gray-400'}`}>
-                    {transaction.sellerConfirmed ? 'Yes' : 'No'}
-                  </span>
-                </div>
-                <div>
-                  <span>Buyer Confirmed:</span>
-                  <span className={`ml-2 ${transaction.buyerConfirmed ? 'text-green-500' : 'text-gray-400'}`}>
-                    {transaction.buyerConfirmed ? 'Yes' : 'No'}
-                  </span>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-2">
-                {canConfirm(transaction) && (
-                  <button
-                    onClick={confirmTransaction}
-                    disabled={confirmingTransaction}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center"
-                  >
-                    {confirmingTransaction ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        Confirming...
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle className="w-4 h-4 mr-1" />
-                        Confirm Transaction
-                      </>
-                    )}
-                  </button>
-                )}
-
-                {canCancel(transaction) && (
-                  <button
-                    onClick={cancelTransaction}
-                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-medium flex items-center"
-                  >
-                    <XCircle className="w-4 h-4 mr-1" />
-                    Cancel Transaction
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Transaction Form */}
-        {showTransactionForm && (
-          <div className="p-4 border-b border-gray-700">
-            <div className="bg-[#001020] rounded-lg p-4">
-              <h4 className="font-semibold mb-4">Start Transaction</h4>
-              <form onSubmit={handleCreateTransaction} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Agreed Price</label>
-                  <div className="relative">
-                    <DollarSign className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={agreedPrice}
-                      onChange={(e) => setAgreedPrice(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full pl-10 pr-4 py-2 bg-[#000814] border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-[#00154B] focus:border-[#00154B]"
-                      required
-                    />
-                  </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    This will initiate a transaction that both parties need to confirm
-                  </p>
-                </div>
-
-                <div className="flex space-x-2">
-                  <button
-                    type="submit"
-                    disabled={creatingTransaction || !agreedPrice}
-                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center"
-                  >
-                    {creatingTransaction ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                        Creating...
-                      </>
-                    ) : (
-                      <>
-                        <CreditCard className="w-4 h-4 mr-1" />
-                        Create Transaction
-                      </>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setShowTransactionForm(false)}
-                    className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-[#00154B]/10 text-sm"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </form>
             </div>
           </div>
         )}
@@ -595,6 +498,142 @@ export default function MessagesPage() {
           </form>
         </div>
       </div>
+
+      {/* Transaction Modal */}
+      {showTransactionModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[#001020] rounded-lg max-w-md w-full max-h-[90vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-gray-700">
+              <h3 className="text-lg font-semibold">
+                {transactionModalType === 'create' ? 'Start Transaction' : 'Transaction Status'}
+              </h3>
+              <button
+                onClick={closeTransactionModal}
+                className="p-2 hover:bg-gray-700 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4">
+              {transactionModalType === 'create' ? (
+                <form onSubmit={handleCreateTransaction} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">Agreed Price</label>
+                    <div className="relative">
+                      <DollarSign className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={agreedPrice}
+                        onChange={(e) => setAgreedPrice(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full pl-10 pr-4 py-2 bg-[#000814] border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:ring-2 focus:ring-[#00154B] focus:border-[#00154B]"
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-1">
+                      This will initiate a transaction that both parties need to confirm
+                    </p>
+                  </div>
+
+                  <div className="flex space-x-2 pt-4">
+                    <button
+                      type="submit"
+                      disabled={creatingTransaction || !agreedPrice}
+                      className="flex-1 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center justify-center"
+                    >
+                      {creatingTransaction ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                          Creating...
+                        </>
+                      ) : (
+                        <>
+                          <CreditCard className="w-4 h-4 mr-1" />
+                          Create Transaction
+                        </>
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={closeTransactionModal}
+                      className="px-4 py-2 border border-gray-600 rounded-lg hover:bg-[#00154B]/10 text-sm"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                transaction && (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center space-x-2">
+                        {getStatusIcon(transaction.status)}
+                        <h4 className="font-semibold">Transaction Details</h4>
+                      </div>
+                      <span className="text-lg font-bold text-green-500">
+                        ${parseFloat(transaction.agreedPrice).toFixed(2)}
+                      </span>
+                    </div>
+
+                    <p className="text-sm text-gray-300">{getStatusText(transaction)}</p>
+
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="bg-[#000814] p-3 rounded-lg">
+                        <span className="block text-gray-400">Seller Confirmed:</span>
+                        <span className={`font-medium ${transaction.sellerConfirmed ? 'text-green-500' : 'text-gray-400'}`}>
+                          {transaction.sellerConfirmed ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                      <div className="bg-[#000814] p-3 rounded-lg">
+                        <span className="block text-gray-400">Buyer Confirmed:</span>
+                        <span className={`font-medium ${transaction.buyerConfirmed ? 'text-green-500' : 'text-gray-400'}`}>
+                          {transaction.buyerConfirmed ? 'Yes' : 'No'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col space-y-2 pt-4">
+                      {canConfirm(transaction) && (
+                        <button
+                          onClick={confirmTransaction}
+                          disabled={confirmingTransaction}
+                          className="w-full bg-green-600 text-white px-4 py-3 rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm font-medium flex items-center justify-center"
+                        >
+                          {confirmingTransaction ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Confirming...
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle className="w-4 h-4 mr-2" />
+                              Confirm Transaction
+                            </>
+                          )}
+                        </button>
+                      )}
+
+                      {canCancel(transaction) && (
+                        <button
+                          onClick={cancelTransaction}
+                          className="w-full bg-red-600 text-white px-4 py-3 rounded-lg hover:bg-red-700 text-sm font-medium flex items-center justify-center"
+                        >
+                          <XCircle className="w-4 h-4 mr-2" />
+                          Cancel Transaction
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

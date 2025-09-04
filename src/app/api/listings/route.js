@@ -10,7 +10,7 @@ import {
   extractProductDetails,
   processImageAnalysis,
   batchProcessImageAnalyses
-} from '@/app/lib/server-enhanced-upload-utility'; // Changed from enhanced-upload-utility to server-enhanced-upload-utility
+} from '@/app/lib/server-enhanced-upload-utility';
 
 export async function GET(request) {
     try {
@@ -137,9 +137,6 @@ export async function POST(request) {
         let moderationFlags = [];
         let aiCategoryConfidence = null;
         let visionAnalysis = null;
-        let detectedBrands = [];
-        let suggestedPrice = null;
-        let specifications = [];
 
         if (imageAnalysis && imageAnalysis.length > 0) {
             console.log('Processing image analysis results:', imageAnalysis.length);
@@ -167,16 +164,12 @@ export async function POST(request) {
             extractedText = batchResults.combinedText;
             moderationFlags = batchResults.allModerationFlags;
             aiCategoryConfidence = batchResults.bestCategoryConfidence > 0 ? batchResults.bestCategoryConfidence : null;
-            detectedBrands = batchResults.allDetectedBrands;
-            suggestedPrice = batchResults.bestSuggestedPrice;
-            specifications = batchResults.allSpecifications;
 
             console.log('Processed analysis:', {
                 contentStatus,
                 extractedTextLength: extractedText.length,
                 moderationFlags: moderationFlags.length,
-                aiCategoryConfidence,
-                detectedBrands: detectedBrands.length
+                aiCategoryConfidence
             });
         }
 
@@ -196,12 +189,7 @@ export async function POST(request) {
                 contentStatus,
                 extractedText: extractedText || null,
                 aiCategoryConfidence: aiCategoryConfidence,
-                moderationFlags,
-                
-                // Additional processed fields for easier querying
-                detectedBrands: detectedBrands.length > 0 ? detectedBrands : null,
-                suggestedPrice: suggestedPrice,
-                specifications: specifications.length > 0 ? specifications : null
+                moderationFlags
             },
             include: {
                 user: {
@@ -261,8 +249,42 @@ export async function POST(request) {
         // Send notification if content needs review
         if (contentStatus === 'PENDING_REVIEW') {
             console.log(`Listing ${listing.id} flagged for review:`, moderationFlags);
+            
+            // Create notification for review
+            try {
+                await db.notifications.create({
+                    data: {
+                        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        type: 'CONTENT_FLAGGED',
+                        title: 'Listing Under Review',
+                        message: `Your listing "${listing.title}" is being reviewed for content policy compliance.`,
+                        userId: user.uid,
+                        listingId: listing.id,
+                        updatedAt: new Date()
+                    }
+                });
+            } catch (notificationError) {
+                console.warn('Failed to create notification:', notificationError);
+            }
         } else if (contentStatus === 'REJECTED') {
             console.log(`Listing ${listing.id} rejected due to unsafe content:`, moderationFlags);
+            
+            // Create notification for rejection
+            try {
+                await db.notifications.create({
+                    data: {
+                        id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                        type: 'CONTENT_FLAGGED',
+                        title: 'Listing Rejected',
+                        message: `Your listing "${listing.title}" was rejected due to content policy violations: ${moderationFlags.join(', ')}.`,
+                        userId: user.uid,
+                        listingId: listing.id,
+                        updatedAt: new Date()
+                    }
+                });
+            } catch (notificationError) {
+                console.warn('Failed to create notification:', notificationError);
+            }
         }
 
         return NextResponse.json({
@@ -270,20 +292,35 @@ export async function POST(request) {
             contentStatus,
             needsReview: contentStatus === 'PENDING_REVIEW',
             moderationFlags,
-            detectedBrands,
             extractedText: extractedText || null
         });
     } catch (error) {
         console.error('Create listing error:', error);
         console.error('Error stack:', error.stack);
+        
+        // Return more specific error information for debugging
+        if (error.code === 'P2002') {
+            return NextResponse.json(
+                { error: 'Duplicate entry detected', details: error.meta },
+                { status: 400 }
+            );
+        }
+        
+        if (error.code === 'P2003') {
+            return NextResponse.json(
+                { error: 'Foreign key constraint failed', details: error.meta },
+                { status: 400 }
+            );
+        }
+        
         return NextResponse.json(
-            { error: 'Failed to create listing', details: error.message },
+            { error: 'Failed to create listing', details: error.message, code: error.code },
             { status: 500 }
         );
     }
 }
 
-// New endpoint for content moderation review
+// Content moderation review endpoint
 export async function PATCH(request) {
     try {
         const user = await verifyAuthToken(request);
@@ -291,14 +328,13 @@ export async function PATCH(request) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        // This would be used by moderators/admins to review flagged content
         const { listingId, action, reason } = await request.json();
         
         if (!listingId || !action) {
             return NextResponse.json({ error: 'Listing ID and action required' }, { status: 400 });
         }
 
-        // Check if user has moderation permissions (you'd implement this based on your user roles)
+        // Check if user has moderation permissions
         const canModerate = await checkModerationPermissions(user.uid);
         if (!canModerate) {
             return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
@@ -342,7 +378,7 @@ export async function PATCH(request) {
         
         // Create notification for listing owner
         try {
-            await db.notification.create({
+            await db.notifications.create({
                 data: {
                     id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     type: 'CONTENT_FLAGGED',
@@ -366,7 +402,7 @@ export async function PATCH(request) {
     } catch (error) {
         console.error('Content moderation error:', error);
         return NextResponse.json(
-            { error: 'Failed to update listing status' },
+            { error: 'Failed to update listing status', details: error.message },
             { status: 500 }
         );
     }

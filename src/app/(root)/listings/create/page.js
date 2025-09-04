@@ -8,12 +8,12 @@ import {
   Camera, X, Upload, MapPin, DollarSign, Eye, AlertTriangle,
   CheckCircle, Brain, Text, Tag, Sparkles
 } from 'lucide-react'
+import { useEnhancedFileUpload } from '@/app/lib/enhanced-upload-utility'
 import {
-  useEnhancedFileUpload,
   getCategorySuggestions,
   extractProductDetails,
   checkContentSafety
-} from '@/app/lib/enhanced-upload-utility'
+} from '@/app/lib/client-enhanced-upload-utility'
 
 export default function EnhancedCreateListing() {
   const { currentUser } = useAuth()
@@ -552,8 +552,8 @@ export default function EnhancedCreateListing() {
                   <div className="mb-4">
                     <h3 className="text-sm font-medium text-white mb-2">Content Safety</h3>
                     <div className={`p-2 rounded text-sm ${suggestions.safety.safe
-                        ? 'bg-green-900 text-green-200 border border-green-700'
-                        : 'bg-red-900 text-red-200 border border-red-700'
+                      ? 'bg-green-900 text-green-200 border border-green-700'
+                      : 'bg-red-900 text-red-200 border border-red-700'
                       }`}>
                       {suggestions.safety.safe ? (
                         <div className="flex items-center">

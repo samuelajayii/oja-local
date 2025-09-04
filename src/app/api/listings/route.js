@@ -4,7 +4,13 @@ import { db } from '@/app/lib/db'
 import { verifyAuthToken } from '@/app/lib/auth-helpers'
 import { deleteImage } from '@/app/lib/storage';
 import { CacheManager } from '@/app/lib/redis';
-import { checkContentSafety, getCategorySuggestions, extractProductDetails } from '@/app/lib/enhanced-upload-utility';
+import { 
+  checkContentSafety, 
+  getCategorySuggestions, 
+  extractProductDetails,
+  processImageAnalysis,
+  batchProcessImageAnalyses
+} from '@/app/lib/enhanced-upload-utility';
 
 export async function GET(request) {
     try {
@@ -125,65 +131,53 @@ export async function POST(request) {
             });
         }
 
-        // Process Vision API analysis results
+        // Process Vision API analysis results using server-side utilities
         let contentStatus = 'APPROVED';
         let extractedText = '';
         let moderationFlags = [];
         let aiCategoryConfidence = null;
         let visionAnalysis = null;
+        let detectedBrands = [];
+        let suggestedPrice = null;
+        let specifications = [];
 
         if (imageAnalysis && imageAnalysis.length > 0) {
-            // Combine all analysis results
+            console.log('Processing image analysis results:', imageAnalysis.length);
+            
+            // Store the raw vision analysis
             visionAnalysis = {
                 totalImages: imageAnalysis.length,
                 analysisTimestamp: new Date().toISOString(),
                 results: imageAnalysis
             };
 
-            // Check content safety across all images
-            let allSafe = true;
-            let needsReview = false;
-            const allExtractedText = [];
-            const allFlags = [];
-            let bestCategoryConfidence = 0;
-
-            for (const analysis of imageAnalysis) {
-                if (analysis) {
-                    // Check safety
-                    const safety = checkContentSafety(analysis);
-                    if (!safety.safe) {
-                        allSafe = false;
-                        allFlags.push(...safety.unsafeCategories);
-                    }
-                    if (safety.needsReview) {
-                        needsReview = true;
-                        allFlags.push(...safety.reviewCategories);
-                    }
-
-                    // Extract text
-                    const productDetails = extractProductDetails(analysis);
-                    if (productDetails?.extractedText) {
-                        allExtractedText.push(productDetails.extractedText);
-                    }
-
-                    // Get category confidence - Fixed typo here
-                    const categorySuggestions = getCategorySuggestions(analysis);
-                    if (categorySuggestions.length > 0) {
-                        bestCategoryConfidence = Math.max(bestCategoryConfidence, categorySuggestions[0].confidence);
-                    }
-                }
-            }
-
-            // Determine content status
-            if (!allSafe) {
+            // Process using batch analysis
+            const batchResults = batchProcessImageAnalyses(imageAnalysis);
+            
+            // Set content status based on batch results
+            if (!batchResults.overallSafe) {
                 contentStatus = 'REJECTED';
-            } else if (needsReview) {
+                console.log('Content rejected due to safety concerns');
+            } else if (batchResults.needsReview) {
                 contentStatus = 'PENDING_REVIEW';
+                console.log('Content flagged for review');
             }
 
-            extractedText = allExtractedText.join(' ').trim();
-            moderationFlags = [...new Set(allFlags)]; // Remove duplicates
-            aiCategoryConfidence = bestCategoryConfidence > 0 ? bestCategoryConfidence : null;
+            // Extract processed data
+            extractedText = batchResults.combinedText;
+            moderationFlags = batchResults.allModerationFlags;
+            aiCategoryConfidence = batchResults.bestCategoryConfidence > 0 ? batchResults.bestCategoryConfidence : null;
+            detectedBrands = batchResults.allDetectedBrands;
+            suggestedPrice = batchResults.bestSuggestedPrice;
+            specifications = batchResults.allSpecifications;
+
+            console.log('Processed analysis:', {
+                contentStatus,
+                extractedTextLength: extractedText.length,
+                moderationFlags: moderationFlags.length,
+                aiCategoryConfidence,
+                detectedBrands: detectedBrands.length
+            });
         }
 
         // Create the listing with Vision API data
@@ -202,7 +196,12 @@ export async function POST(request) {
                 contentStatus,
                 extractedText: extractedText || null,
                 aiCategoryConfidence: aiCategoryConfidence,
-                moderationFlags
+                moderationFlags,
+                
+                // Additional processed fields for easier querying
+                detectedBrands: detectedBrands.length > 0 ? detectedBrands : null,
+                suggestedPrice: suggestedPrice,
+                specifications: specifications.length > 0 ? specifications : null
             },
             include: {
                 user: {
@@ -227,16 +226,17 @@ export async function POST(request) {
                 const imageUrl = listingData.images[i];
                 
                 if (analysis && imageUrl) {
-                    const safety = checkContentSafety(analysis);
+                    // Process individual analysis for this image
+                    const processedAnalysis = processImageAnalysis(analysis);
                     
                     imageAnalysisRecords.push({
                         listingId: listing.id,
                         imageUrl,
                         analysisType: 'COMPREHENSIVE',
                         analysisResult: analysis,
-                        safeContent: safety.safe,
-                        needsReview: safety.needsReview || false,
-                        confidenceScore: aiCategoryConfidence
+                        safeContent: processedAnalysis.contentSafe,
+                        needsReview: processedAnalysis.needsReview || false,
+                        confidenceScore: processedAnalysis.categoryConfidence || 0
                     });
                 }
             }
@@ -245,6 +245,7 @@ export async function POST(request) {
                 await db.imageAnalysis.createMany({
                     data: imageAnalysisRecords
                 });
+                console.log(`Created ${imageAnalysisRecords.length} image analysis records`);
             }
         }
 
@@ -252,24 +253,31 @@ export async function POST(request) {
         try {
             await CacheManager.delPattern('listings:*');
             await CacheManager.del(CacheManager.keys.userListings(user.uid));
+            console.log('Cache invalidated successfully');
         } catch (cacheError) {
             console.warn('Failed to invalidate cache:', cacheError);
         }
 
         // Send notification if content needs review
         if (contentStatus === 'PENDING_REVIEW') {
-            console.log(`Listing ${listing.id} flagged for review`);
+            console.log(`Listing ${listing.id} flagged for review:`, moderationFlags);
+        } else if (contentStatus === 'REJECTED') {
+            console.log(`Listing ${listing.id} rejected due to unsafe content:`, moderationFlags);
         }
 
         return NextResponse.json({
             ...listing,
             contentStatus,
-            needsReview: contentStatus === 'PENDING_REVIEW'
+            needsReview: contentStatus === 'PENDING_REVIEW',
+            moderationFlags,
+            detectedBrands,
+            extractedText: extractedText || null
         });
     } catch (error) {
         console.error('Create listing error:', error);
+        console.error('Error stack:', error.stack);
         return NextResponse.json(
-            { error: 'Failed to create listing' },
+            { error: 'Failed to create listing', details: error.message },
             { status: 500 }
         );
     }
@@ -366,7 +374,16 @@ export async function PATCH(request) {
 
 // Helper function to check moderation permissions
 async function checkModerationPermissions(userId) {
-    // Implement your role-based permission checking here
-    // For now, returning false - you'd check against admin roles, etc.
-    return false;
+    try {
+        // Check if user has admin/moderator role
+        const user = await db.user.findUnique({
+            where: { id: userId },
+            select: { role: true }
+        });
+        
+        return user?.role === 'ADMIN' || user?.role === 'MODERATOR';
+    } catch (error) {
+        console.error('Error checking moderation permissions:', error);
+        return false;
+    }
 }

@@ -4,6 +4,7 @@ import { db } from '@/app/lib/db'
 import { verifyAuthToken } from '@/app/lib/auth-helpers'
 import { deleteImage } from '@/app/lib/storage';
 import { CacheManager } from '@/app/lib/redis';
+import { checkContentSafety, getCategorySuggestions, extractProductDetails } from '@/app/lib/enhanced-upload-utility';
 
 export async function GET(request) {
     try {
@@ -11,9 +12,10 @@ export async function GET(request) {
         const search = searchParams.get('search');
         const category = searchParams.get('category');
         const userId = searchParams.get('userId');
+        const contentStatus = searchParams.get('contentStatus') || 'APPROVED'; // Only show approved by default
 
         // Generate cache key
-        const cacheKey = CacheManager.keys.listings({ search, category, userId });
+        const cacheKey = CacheManager.keys.listings({ search, category, userId, contentStatus });
         
         // Try to get from cache first
         const cachedListings = await CacheManager.get(cacheKey);
@@ -25,10 +27,12 @@ export async function GET(request) {
         const whereClause = {
             AND: [
                 { status: 'ACTIVE' },
+                { contentStatus }, // Filter by content moderation status
                 search ? {
                     OR: [
                         { title: { contains: search, mode: 'insensitive' } },
-                        { description: { contains: search, mode: 'insensitive' } }
+                        { description: { contains: search, mode: 'insensitive' } },
+                        { extractedText: { contains: search, mode: 'insensitive' } } // Search in extracted text too
                     ]
                 } : {},
                 category ? { categoryId: category } : {},
@@ -58,6 +62,14 @@ export async function GET(request) {
                         conversations: true,
                         favorites: true
                     }
+                },
+                imageAnalyses: {
+                    select: {
+                        analysisType: true,
+                        safeContent: true,
+                        needsReview: true,
+                        confidenceScore: true
+                    }
                 }
             },
             orderBy: { createdAt: 'desc' }
@@ -85,6 +97,7 @@ export async function POST(request) {
         }
 
         const data = await request.json();
+        const { imageAnalysis = [], ...listingData } = data;
 
         // Ensure user exists in PostgreSQL database (fallback creation if needed)
         let dbUser = await db.user.findUnique({
@@ -103,15 +116,84 @@ export async function POST(request) {
             });
         }
 
+        // Process Vision API analysis results
+        let contentStatus = 'APPROVED';
+        let extractedText = '';
+        let moderationFlags = [];
+        let aiCategoryConfidence = null;
+        let visionAnalysis = null;
+
+        if (imageAnalysis && imageAnalysis.length > 0) {
+            // Combine all analysis results
+            visionAnalysis = {
+                totalImages: imageAnalysis.length,
+                analysisTimestamp: new Date().toISOString(),
+                results: imageAnalysis
+            };
+
+            // Check content safety across all images
+            let allSafe = true;
+            let needsReview = false;
+            const allExtractedText = [];
+            const allFlags = [];
+            let bestCategoryConfidence = 0;
+
+            for (const analysis of imageAnalysis) {
+                if (analysis) {
+                    // Check safety
+                    const safety = checkContentSafety(analysis);
+                    if (!safety.safe) {
+                        allSafe = false;
+                        allFlags.push(...safety.unsafeCategories);
+                    }
+                    if (safety.needsReview) {
+                        needsReview = true;
+                        allFlags.push(...safety.reviewCategories);
+                    }
+
+                    // Extract text
+                    const productDetails = extractProductDetails(analysis);
+                    if (productDetails?.extractedText) {
+                        allExtractedText.push(productDetails.extractedText);
+                    }
+
+                    // Get category confidence
+                    const categoryuggestions = getCategorySuggestions(analysis);
+                    if (categorySuggestions.length > 0) {
+                        bestCategoryConfidence = Math.max(bestCategoryConfidence, categorySuggestions[0].confidence);
+                    }
+                }
+            }
+
+            // Determine content status
+            if (!allSafe) {
+                contentStatus = 'REJECTED';
+            } else if (needsReview) {
+                contentStatus = 'PENDING_REVIEW';
+            }
+
+            extractedText = allExtractedText.join(' ').trim();
+            moderationFlags = [...new Set(allFlags)]; // Remove duplicates
+            aiCategoryConfidence = bestCategoryConfidence > 0 ? bestCategoryConfidence : null;
+        }
+
+        // Create the listing with Vision API data
         const listing = await db.listing.create({
             data: {
-                title: data.title,
-                description: data.description,
-                price: data.price ? parseFloat(data.price) : null,
-                images: data.images || [],
-                location: data.location,
+                title: listingData.title,
+                description: listingData.description,
+                price: listingData.price ? parseFloat(listingData.price) : null,
+                images: listingData.images || [],
+                location: listingData.location,
                 userId: user.uid,
-                categoryId: data.categoryId
+                categoryId: listingData.categoryId,
+                
+                // Vision API fields
+                visionAnalysis,
+                contentStatus,
+                extractedText: extractedText || null,
+                aiCategoryConfidence: aiCategoryConfidence,
+                moderationFlags
             },
             include: {
                 user: {
@@ -127,11 +209,51 @@ export async function POST(request) {
             }
         });
 
+        // Create detailed image analysis records
+        if (imageAnalysis && imageAnalysis.length > 0 && listingData.images) {
+            const imageAnalysisRecords = [];
+            
+            for (let i = 0; i < Math.min(imageAnalysis.length, listingData.images.length); i++) {
+                const analysis = imageAnalysis[i];
+                const imageUrl = listingData.images[i];
+                
+                if (analysis && imageUrl) {
+                    const safety = checkContentSafety(analysis);
+                    
+                    imageAnalysisRecords.push({
+                        listingId: listing.id,
+                        imageUrl,
+                        analysisType: 'COMPREHENSIVE',
+                        analysisResult: analysis,
+                        safeContent: safety.safe,
+                        needsReview: safety.needsReview || false,
+                        confidenceScore: aiCategoryConfidence
+                    });
+                }
+            }
+
+            if (imageAnalysisRecords.length > 0) {
+                await db.imageAnalysis.createMany({
+                    data: imageAnalysisRecords
+                });
+            }
+        }
+
         // Invalidate relevant caches
         await CacheManager.delPattern('listings:*');
         await CacheManager.del(CacheManager.keys.userListings(user.uid));
 
-        return NextResponse.json(listing);
+        // Send notification if content needs review
+        if (contentStatus === 'PENDING_REVIEW') {
+            // You can add notification logic here
+            console.log(`Listing ${listing.id} flagged for review`);
+        }
+
+        return NextResponse.json({
+            ...listing,
+            contentStatus,
+            needsReview: contentStatus === 'PENDING_REVIEW'
+        });
     } catch (error) {
         console.error('Create listing error:', error);
         return NextResponse.json(
@@ -139,4 +261,94 @@ export async function POST(request) {
             { status: 500 }
         );
     }
+}
+
+// New endpoint for content moderation review
+export async function PATCH(request) {
+    try {
+        const user = await verifyAuthToken(request);
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        // This would be used by moderators/admins to review flagged content
+        const { listingId, action, reason } = await request.json();
+        
+        if (!listingId || !action) {
+            return NextResponse.json({ error: 'Listing ID and action required' }, { status: 400 });
+        }
+
+        // Check if user has moderation permissions (you'd implement this based on your user roles)
+        const canModerate = await checkModerationPermissions(user.uid);
+        if (!canModerate) {
+            return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 });
+        }
+
+        let newStatus;
+        switch (action) {
+            case 'approve':
+                newStatus = 'APPROVED';
+                break;
+            case 'reject':
+                newStatus = 'REJECTED';
+                break;
+            case 'flag':
+                newStatus = 'FLAGGED';
+                break;
+            default:
+                return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
+        }
+
+        const updatedListing = await db.listing.update({
+            where: { id: listingId },
+            data: {
+                contentStatus: newStatus,
+                moderationFlags: reason ? { push: reason } : undefined
+            },
+            include: {
+                user: {
+                    select: { id: true, name: true, avatar: true }
+                },
+                category: true
+            }
+        });
+
+        // Invalidate caches
+        await CacheManager.delPattern('listings:*');
+        
+        // Send notification to listing owner
+        if (newStatus === 'REJECTED' || newStatus === 'FLAGGED') {
+            await db.notifications.create({
+                data: {
+                    id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                    type: 'CONTENT_FLAGGED',
+                    title: 'Listing Content Review',
+                    message: `Your listing "${updatedListing.title}" has been ${action}ed${reason ? `: ${reason}` : '.'}`,
+                    userId: updatedListing.userId,
+                    listingId: listingId,
+                    updatedAt: new Date()
+                }
+            });
+        }
+
+        return NextResponse.json({
+            success: true,
+            listing: updatedListing,
+            action,
+            reason
+        });
+    } catch (error) {
+        console.error('Content moderation error:', error);
+        return NextResponse.json(
+            { error: 'Failed to update listing status' },
+            { status: 500 }
+        );
+    }
+}
+
+// Helper function to check moderation permissions
+async function checkModerationPermissions(userId) {
+    // Implement your role-based permission checking here
+    // For now, returning false - you'd check against admin roles, etc.
+    return false;
 }

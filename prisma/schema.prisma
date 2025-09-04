@@ -41,29 +41,59 @@ model Category {
 }
 
 model Listing {
-  id            String          @id @default(cuid())
-  title         String
-  description   String
-  price         Decimal?
-  images        String[]
-  status        ListingStatus   @default(ACTIVE)
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  userId        String
-  categoryId    String
-  location      String?
-  favorites     Favorite[]
-  category      Category        @relation(fields: [categoryId], references: [id])
-  user          User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages      Message[]
-  conversations Conversation[]
-  transaction   Transaction?
-  notifications notifications[]
+  id                    String          @id @default(cuid())
+  title                 String
+  description           String
+  price                 Decimal?
+  images                String[]
+  status                ListingStatus   @default(ACTIVE)
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  userId                String
+  categoryId            String
+  location              String?
+  
+  // Vision API related fields
+  visionAnalysis        Json?           // Stores complete Vision API analysis results
+  contentStatus         ContentStatus   @default(APPROVED)
+  extractedText         String?         // Text extracted from images via OCR
+  aiCategoryConfidence  Decimal?        // Confidence score for AI-suggested category
+  moderationFlags       String[]        // Array of moderation flags if any
+  
+  favorites             Favorite[]
+  category              Category        @relation(fields: [categoryId], references: [id])
+  user                  User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages              Message[]
+  conversations         Conversation[]
+  transaction           Transaction?
+  notifications         notifications[]
+  imageAnalyses         ImageAnalysis[] // Detailed analysis for each image
 
   @@index([status, createdAt])
   @@index([categoryId])
   @@index([userId])
+  @@index([contentStatus])
   @@map("listings")
+}
+model ImageAnalysis {
+  id               String      @id @default(cuid())
+  listingId        String
+  imageUrl         String
+  analysisType     AnalysisType
+  analysisResult   Json        // Complete analysis result from Vision API
+  safeContent      Boolean     @default(true)
+  needsReview      Boolean     @default(false)
+  confidenceScore  Decimal?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  
+  listing          Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([safeContent])
+  @@index([needsReview])
+  @@index([analysisType])
+  @@map("image_analyses")
 }
 
 model Conversation {
@@ -176,6 +206,20 @@ enum ListingStatus {
   DRAFT
 }
 
+enum ContentStatus {
+  APPROVED
+  PENDING_REVIEW
+  REJECTED
+  FLAGGED
+}
+
+enum AnalysisType {
+  MODERATION
+  TEXT_EXTRACTION
+  CATEGORIZATION
+  COMPREHENSIVE
+}
+
 enum ConversationStatus {
   ACTIVE
   TRANSACTION_PENDING
@@ -199,6 +243,8 @@ enum NotificationType {
   USER
   TRANSACTION_CONFIRMED
   TRANSACTION_COMPLETED
+  CONTENT_FLAGGED
+  ANALYSIS_COMPLETE
 }
 
 enum MessageType {

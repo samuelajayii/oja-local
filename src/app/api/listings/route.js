@@ -10,7 +10,7 @@ import {
   extractProductDetails,
   processImageAnalysis,
   batchProcessImageAnalyses
-} from '@/app/lib/enhanced-upload-utility';
+} from '@/app/lib/server-enhanced-upload-utility'; // Changed from enhanced-upload-utility to server-enhanced-upload-utility
 
 export async function GET(request) {
     try {

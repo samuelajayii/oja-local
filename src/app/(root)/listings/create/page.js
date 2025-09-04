@@ -71,6 +71,7 @@ export default function EnhancedCreateListing() {
       const latestAnalysis = analysisResults[analysisResults.length - 1]
       updateSuggestionsFromAnalysis(latestAnalysis.analysis)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [analysisResults])
 
   const fetchCategories = async () => {

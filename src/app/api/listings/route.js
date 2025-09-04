@@ -17,11 +17,16 @@ export async function GET(request) {
         // Generate cache key
         const cacheKey = CacheManager.keys.listings({ search, category, userId, contentStatus });
         
-        // Try to get from cache first
-        const cachedListings = await CacheManager.get(cacheKey);
-        if (cachedListings) {
-            console.log('Returning cached listings');
-            return NextResponse.json(cachedListings);
+        // Try to get from cache first (with error handling)
+        let cachedListings;
+        try {
+            cachedListings = await CacheManager.get(cacheKey);
+            if (cachedListings) {
+                console.log('Returning cached listings');
+                return NextResponse.json(cachedListings);
+            }
+        } catch (cacheError) {
+            console.warn('Cache error, proceeding with database query:', cacheError);
         }
 
         const whereClause = {
@@ -75,10 +80,14 @@ export async function GET(request) {
             orderBy: { createdAt: 'desc' }
         });
 
-        // Cache the results for 5 minutes (300 seconds)
-        await CacheManager.set(cacheKey, listings, 300);
+        // Try to cache the results for 5 minutes (300 seconds)
+        try {
+            await CacheManager.set(cacheKey, listings, 300);
+            console.log('Cached fresh listings data');
+        } catch (cacheError) {
+            console.warn('Failed to cache results:', cacheError);
+        }
         
-        console.log('Cached fresh listings data');
         return NextResponse.json(listings);
     } catch (error) {
         console.error('Database error:', error);
@@ -157,8 +166,8 @@ export async function POST(request) {
                         allExtractedText.push(productDetails.extractedText);
                     }
 
-                    // Get category confidence
-                    const categoryuggestions = getCategorySuggestions(analysis);
+                    // Get category confidence - Fixed typo here
+                    const categorySuggestions = getCategorySuggestions(analysis);
                     if (categorySuggestions.length > 0) {
                         bestCategoryConfidence = Math.max(bestCategoryConfidence, categorySuggestions[0].confidence);
                     }
@@ -239,13 +248,16 @@ export async function POST(request) {
             }
         }
 
-        // Invalidate relevant caches
-        await CacheManager.delPattern('listings:*');
-        await CacheManager.del(CacheManager.keys.userListings(user.uid));
+        // Try to invalidate relevant caches
+        try {
+            await CacheManager.delPattern('listings:*');
+            await CacheManager.del(CacheManager.keys.userListings(user.uid));
+        } catch (cacheError) {
+            console.warn('Failed to invalidate cache:', cacheError);
+        }
 
         // Send notification if content needs review
         if (contentStatus === 'PENDING_REVIEW') {
-            // You can add notification logic here
             console.log(`Listing ${listing.id} flagged for review`);
         }
 
@@ -313,12 +325,16 @@ export async function PATCH(request) {
             }
         });
 
-        // Invalidate caches
-        await CacheManager.delPattern('listings:*');
+        // Try to invalidate caches
+        try {
+            await CacheManager.delPattern('listings:*');
+        } catch (cacheError) {
+            console.warn('Failed to invalidate cache:', cacheError);
+        }
         
-        // Send notification to listing owner
-        if (newStatus === 'REJECTED' || newStatus === 'FLAGGED') {
-            await db.notifications.create({
+        // Create notification for listing owner
+        try {
+            await db.notification.create({
                 data: {
                     id: `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
                     type: 'CONTENT_FLAGGED',
@@ -329,6 +345,8 @@ export async function PATCH(request) {
                     updatedAt: new Date()
                 }
             });
+        } catch (notificationError) {
+            console.warn('Failed to create notification:', notificationError);
         }
 
         return NextResponse.json({

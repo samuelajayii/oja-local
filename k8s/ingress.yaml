@@ -1,0 +1,21 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: oja-local-ingress
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "oja-local-ip"
+    networking.gke.io/managed-certificates: "oja-local-ssl-cert"
+    kubernetes.io/ingress.class: "gce"
+spec:
+  rules:
+  - host: your-domain.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: oja-local-service
+            port:
+              number: 80

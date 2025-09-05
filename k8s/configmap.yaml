@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oja-local-config
+  namespace: default
+data:
+  NODE_ENV: "production"
+  PORT: "8080"
+  HOSTNAME: "0.0.0.0"
+  REDIS_HOST: "10.21.145.3"
+  REDIS_PORT: "6379"
+  NEXT_PUBLIC_API_KEY: "AIzaSyDNZ2ILWTjcoyDsAFo9lLGAv9yR8NM4t58"
+  NEXT_PUBLIC_AUTH_DOMAIN: "oja-local.firebaseapp.com"
+  NEXT_PUBLIC_PROJECT_ID: "oja-local"
+  NEXT_PUBLIC_STORAGE_BUCKET: "oja-local.firebasestorage.app"
+  NEXT_PUBLIC_MESSAGING_SENDER_ID: "20495772090"
+  NEXT_PUBLIC_APP_ID: "1:20495772090:web:c05de7c6e5818d37119583"
+

@@ -1,11 +1,13 @@
-# cloudbuild.yaml - builds docker image with all required build args
 steps:
+  # Build the Docker image
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-t'
-      - 'europe-west1-docker.pkg.dev/oja-local-46990/oja-local/oja-local:latest'
-      # Next.js public environment variables
+      - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest'
+      # All your existing build args...
       - '--build-arg'
       - 'NEXT_PUBLIC_API_KEY=${_NEXT_PUBLIC_API_KEY}'
       - '--build-arg'
@@ -22,7 +24,6 @@ steps:
       - 'NEXT_PUBLIC_MESSAGING_SENDER_ID=${_NEXT_PUBLIC_MESSAGING_SENDER_ID}'
       - '--build-arg'
       - 'NEXT_PUBLIC_APP_ID=${_NEXT_PUBLIC_APP_ID}'
-      # Server-side environment variables
       - '--build-arg'
       - 'DATABASE_URL=${_DATABASE_URL}'
       - '--build-arg'
@@ -35,8 +36,29 @@ steps:
       - 'GOOGLE_CLOUD_STORAGE_BUCKET=${_GOOGLE_CLOUD_STORAGE_BUCKET}'
       - '.'
 
+  # Push both tags
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}']
+  
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest']
+
+  # Deploy to GKE
+  - name: 'gcr.io/cloud-builders/gke-deploy'
+    args:
+      - run
+      - --filename=k8s/
+      - --cluster=$_CLUSTER_NAME
+      - --location=$_CLUSTER_ZONE
+      - --image=europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}
+
 images:
-  - 'europe-west1-docker.pkg.dev/oja-local-46990/oja-local/oja-local:latest'
+  - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}'
+  - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest'
+
+substitutions:
+  _CLUSTER_NAME: 'oja-local-cluster'
+  _CLUSTER_ZONE: 'europe-west1-b'
 
 options:
   logging: CLOUD_LOGGING_ONLY

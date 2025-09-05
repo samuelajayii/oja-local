@@ -3,8 +3,26 @@ import { db } from '@/app/lib/db';
 import { CacheManager } from '@/app/lib/redis';
 
 export class CacheWarming {
+  // Check if we're in build mode or if database is available
+  static shouldSkipWarming() {
+    // Skip during build phase
+    if (process.env.NEXT_PHASE === 'phase-production-build') {
+      return true;
+    }
+    
+    // Skip if no DATABASE_URL is available
+    if (!process.env.DATABASE_URL) {
+      console.log('Skipping cache warming - DATABASE_URL not available');
+      return true;
+    }
+    
+    return false;
+  }
+
   // Warm up categories cache (run this on app startup or periodically)
   static async warmCategories() {
+    if (this.shouldSkipWarming()) return;
+    
     try {
       const categories = await db.category.findMany({
         orderBy: { name: 'asc' }
@@ -19,6 +37,8 @@ export class CacheWarming {
 
   // Warm up popular listings cache
   static async warmPopularListings() {
+    if (this.shouldSkipWarming()) return;
+    
     try {
       const popularListings = await db.listing.findMany({
         where: { status: 'ACTIVE' },
@@ -65,6 +85,8 @@ export class CacheWarming {
 
   // Warm up recent listings cache
   static async warmRecentListings() {
+    if (this.shouldSkipWarming()) return;
+    
     try {
       const recentListings = await db.listing.findMany({
         where: { status: 'ACTIVE' },
@@ -95,6 +117,11 @@ export class CacheWarming {
 
   // Run all warming functions
   static async warmAll() {
+    if (this.shouldSkipWarming()) {
+      console.log('Skipping cache warming during build phase');
+      return;
+    }
+    
     console.log('Starting cache warming...');
 
     await Promise.all([
@@ -108,15 +135,19 @@ export class CacheWarming {
 
   // Schedule periodic cache warming (call this in your app startup)
   static scheduleWarming() {
+    if (this.shouldSkipWarming()) {
+      console.log('Cache warming scheduling skipped during build');
+      return;
+    }
+    
     // Warm cache every 10 minutes
     setInterval(() => {
       this.warmAll();
     }, 10 * 60 * 1000);
 
-    // Initial warming
-    this.warmAll();
+    // Initial warming with delay to ensure app is fully started
+    setTimeout(() => {
+      this.warmAll();
+    }, 5000); // 5 second delay
   }
 }
-
-// Usage: Add this to your app startup (e.g., in layout.js or a separate startup script)
-// CacheWarming.scheduleWarming();

@@ -46,7 +46,7 @@ const Header = () => {
           <Link href="/listings" className="hover:text-gray-200">Browse Listings</Link>
           <Link href="/listings/create" className="hover:text-gray-200">Post Item</Link>
           <Link href="#" className="hover:text-gray-200">Categories</Link>
-          <Link href="/docs" className="hover:text-gray-200">How It Works</Link>
+          <Link href="/" className="hover:text-gray-200">How It Works</Link>
           <Link href={`/users/${user?.uid}?tab=messages`} className="hover:text-gray-200">Messaging</Link>
         </div>
 

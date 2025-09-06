@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
       - name: oja-local
-        image: europe-west1-docker.pkg.dev/PROJECT_ID/oja-local/oja-local:latest
+        image: europe-west1-docker.pkg.dev/oja-local-46990/oja-local/oja-local:latest
         ports:
         - containerPort: 8080
         envFrom:
@@ -32,3 +32,19 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /api/health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3

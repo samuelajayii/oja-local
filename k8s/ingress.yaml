@@ -9,7 +9,7 @@ metadata:
     kubernetes.io/ingress.class: "gce"
 spec:
   rules:
-  - host: your-domain.com
+  - host: http://34.54.154.131.nip.io/
     http:
       paths:
       - path: /

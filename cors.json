@@ -2,7 +2,8 @@
   {
     "origin": [
       "http://localhost:3000",
-      "https://oja-local-790874300827.europe-west1.run.app"
+      "https://oja-local-790874300827.europe-west1.run.app",
+      "http://34.54.154.131.nip.io/"
     ],
     "method": [
       "GET",

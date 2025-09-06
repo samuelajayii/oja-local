@@ -15,6 +15,7 @@ spec:
       labels:
         app: oja-local
     spec:
+      serviceAccountName: oja-local-ksa
       containers:
       - name: oja-local
         image: europe-west1-docker.pkg.dev/oja-local-46990/oja-local/oja-local:latest
@@ -25,6 +26,12 @@ spec:
             name: oja-local-config
         - secretRef:
             name: oja-local-secret
+        env:
+        # Override database connection to use localhost (Cloud SQL Auth Proxy)
+        - name: DATABASE_URL
+          value: "postgresql://$(DB_USER):$(DB_PASS)@127.0.0.1:5432/$(DB_NAME)?schema=public"
+        - name: DIRECT_URL
+          value: "postgresql://$(DB_USER):$(DB_PASS)@127.0.0.1:5432/$(DB_NAME)?schema=public"
         resources:
           requests:
             memory: "256Mi"
@@ -44,7 +51,44 @@ spec:
           httpGet:
             path: /api/health
             port: 8080
-          initialDelaySeconds: 5
+          initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
           failureThreshold: 3
+      # Move Cloud SQL Auth Proxy to regular containers (not initContainers)
+      - name: cloud-sql-proxy
+        image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.14.1
+        args:
+          # Use private IP if your GKE cluster is VPC-native and peered
+          - "--private-ip"
+          
+          # Enable structured logging
+          - "--structured-logs"
+          
+          # Bind to all interfaces
+          - "--address=0.0.0.0"
+          
+          # Replace with your actual instance connection name
+          - "--port=5432"
+          - "oja-local-46990:europe-west1:marketplace-db"
+        securityContext:
+          runAsNonRoot: true
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        # Add health checks for the proxy
+        livenessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          tcpSocket:
+            port: 5432
+          initialDelaySeconds: 5
+          periodSeconds: 5
+      # Removed initContainers section completely

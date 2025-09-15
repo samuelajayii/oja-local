@@ -42,3 +42,9 @@ steps:
   
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest']
+
+images:
+  - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY

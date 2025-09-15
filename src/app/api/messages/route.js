@@ -4,7 +4,6 @@ import { verifyAuthToken } from '@/app/lib/auth-helpers';
 import { db } from '@/app/lib/db';
 import { db as firestore } from '@/app/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
-import { CacheManager } from '@/app/lib/redis';
 
 // Helper function to generate conversation ID
 const getConversationId = (userId1, userId2, listingId) => {
@@ -34,14 +33,6 @@ export async function GET(request) {
     if (listingId && conversationWith) {
       // Get specific conversation messages
       const conversationId = getConversationId(user.uid, conversationWith, listingId);
-      const cacheKey = CacheManager.keys.messages(conversationId);
-      
-      // Try to get from cache first
-      const cachedMessages = await CacheManager.get(cacheKey);
-      if (cachedMessages) {
-        console.log('Returning cached messages');
-        return NextResponse.json(cachedMessages);
-      }
 
       const conversationRef = firestore.collection('conversations').doc(conversationId);
       const conversationDoc = await conversationRef.get();
@@ -88,22 +79,10 @@ export async function GET(request) {
       // Sort messages by creation time
       enhancedMessages.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
-      // Cache messages for 2 minutes (120 seconds) - shorter TTL for real-time data
-      await CacheManager.set(cacheKey, enhancedMessages, 120);
-
       return NextResponse.json(enhancedMessages);
     }
 
     // Get all conversations for the user
-    const userConversationsCacheKey = CacheManager.keys.userConversations(user.uid);
-    
-    // Try to get from cache first
-    const cachedConversations = await CacheManager.get(userConversationsCacheKey);
-    if (cachedConversations) {
-      console.log('Returning cached conversations');
-      return NextResponse.json(cachedConversations);
-    }
-
     const conversationsRef = firestore.collection('conversations');
     const q = conversationsRef
       .where('participants', 'array-contains', user.uid);
@@ -129,40 +108,22 @@ export async function GET(request) {
           continue;
         }
 
-        // Get partner info from PostgreSQL (with caching)
-        const partnerCacheKey = CacheManager.keys.user(partnerId);
-        let partner = await CacheManager.get(partnerCacheKey);
-        
-        if (!partner) {
-          partner = await db.user.findUnique({
-            where: { id: partnerId },
-            select: { id: true, name: true, avatar: true }
-          });
-          
-          if (partner) {
-            await CacheManager.set(partnerCacheKey, partner, 600); // Cache for 10 minutes
-          }
-        }
+        // Get partner info from PostgreSQL
+        const partner = await db.user.findUnique({
+          where: { id: partnerId },
+          select: { id: true, name: true, avatar: true }
+        });
 
         if (!partner) {
           console.warn(`Partner user not found: ${partnerId}`);
           continue;
         }
 
-        // Get listing info from PostgreSQL (with caching)
-        const listingCacheKey = CacheManager.keys.listing(conversationData.listingId);
-        let listing = await CacheManager.get(listingCacheKey);
-        
-        if (!listing) {
-          listing = await db.listing.findUnique({
-            where: { id: conversationData.listingId },
-            select: { id: true, title: true, images: true }
-          });
-          
-          if (listing) {
-            await CacheManager.set(listingCacheKey, listing, 600); // Cache for 10 minutes
-          }
-        }
+        // Get listing info from PostgreSQL
+        const listing = await db.listing.findUnique({
+          where: { id: conversationData.listingId },
+          select: { id: true, title: true, images: true }
+        });
 
         if (!listing) {
           console.warn(`Listing not found: ${conversationData.listingId}`);
@@ -197,9 +158,6 @@ export async function GET(request) {
       const bTime = b.lastMessage?.createdAt || b.updatedAt;
       return new Date(bTime) - new Date(aTime);
     });
-
-    // Cache conversations for 1 minute (60 seconds) - shorter TTL for real-time data
-    await CacheManager.set(userConversationsCacheKey, conversations, 60);
 
     return NextResponse.json(conversations);
   } catch (error) {
@@ -339,12 +297,6 @@ export async function POST(request) {
       }
     });
 
-    // Invalidate caches for both users
-    await CacheManager.del(CacheManager.keys.messages(conversationId));
-    await CacheManager.del(CacheManager.keys.userConversations(user.uid));
-    await CacheManager.del(CacheManager.keys.userConversations(receiverId));
-    await CacheManager.del(CacheManager.keys.conversation(conversationId));
-
     // Get sender info for response
     const sender = await db.user.findUnique({
       where: { id: user.uid },
@@ -410,11 +362,6 @@ export async function PUT(request) {
         updatedAt: FieldValue.serverTimestamp()
       });
     });
-
-    // Invalidate relevant caches
-    await CacheManager.del(CacheManager.keys.messages(conversationId));
-    await CacheManager.del(CacheManager.keys.userConversations(user.uid));
-    await CacheManager.del(CacheManager.keys.conversation(conversationId));
 
     return NextResponse.json({ success: true });
   } catch (error) {

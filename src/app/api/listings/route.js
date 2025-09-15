@@ -1,9 +1,7 @@
-// src/app/api/listings/route.js
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/app/lib/db'
 import { verifyAuthToken } from '@/app/lib/auth-helpers'
 import { deleteImage } from '@/app/lib/storage';
-import { CacheManager } from '@/app/lib/redis';
 import { 
   checkContentSafety, 
   getCategorySuggestions, 
@@ -19,21 +17,6 @@ export async function GET(request) {
         const category = searchParams.get('category');
         const userId = searchParams.get('userId');
         const contentStatus = searchParams.get('contentStatus') || 'APPROVED'; // Only show approved by default
-
-        // Generate cache key
-        const cacheKey = CacheManager.keys.listings({ search, category, userId, contentStatus });
-        
-        // Try to get from cache first (with error handling)
-        let cachedListings;
-        try {
-            cachedListings = await CacheManager.get(cacheKey);
-            if (cachedListings) {
-                console.log('Returning cached listings');
-                return NextResponse.json(cachedListings);
-            }
-        } catch (cacheError) {
-            console.warn('Cache error, proceeding with database query:', cacheError);
-        }
 
         const whereClause = {
             AND: [
@@ -85,14 +68,6 @@ export async function GET(request) {
             },
             orderBy: { createdAt: 'desc' }
         });
-
-        // Try to cache the results for 5 minutes (300 seconds)
-        try {
-            await CacheManager.set(cacheKey, listings, 300);
-            console.log('Cached fresh listings data');
-        } catch (cacheError) {
-            console.warn('Failed to cache results:', cacheError);
-        }
         
         return NextResponse.json(listings);
     } catch (error) {
@@ -237,15 +212,6 @@ export async function POST(request) {
             }
         }
 
-        // Try to invalidate relevant caches
-        try {
-            await CacheManager.delPattern('listings:*');
-            await CacheManager.del(CacheManager.keys.userListings(user.uid));
-            console.log('Cache invalidated successfully');
-        } catch (cacheError) {
-            console.warn('Failed to invalidate cache:', cacheError);
-        }
-
         // Send notification if content needs review
         if (contentStatus === 'PENDING_REVIEW') {
             console.log(`Listing ${listing.id} flagged for review:`, moderationFlags);
@@ -368,13 +334,6 @@ export async function PATCH(request) {
                 category: true
             }
         });
-
-        // Try to invalidate caches
-        try {
-            await CacheManager.delPattern('listings:*');
-        } catch (cacheError) {
-            console.warn('Failed to invalidate cache:', cacheError);
-        }
         
         // Create notification for listing owner
         try {

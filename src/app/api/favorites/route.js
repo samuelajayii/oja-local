@@ -1,23 +1,12 @@
-// src/app/api/favorites/route.js
 import { NextResponse } from 'next/server';
 import { db } from '@/app/lib/db';
 import { verifyAuthToken } from '@/app/lib/auth-helpers';
-import { CacheManager } from '@/app/lib/redis';
 
 export async function GET(request) {
     try {
         const user = await verifyAuthToken(request);
         if (!user) {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-        }
-
-        const cacheKey = CacheManager.keys.favorites(user.uid);
-        
-        // Try to get from cache first
-        const cachedFavorites = await CacheManager.get(cacheKey);
-        if (cachedFavorites) {
-            console.log('Returning cached favorites');
-            return NextResponse.json(cachedFavorites);
         }
 
         const favorites = await db.favorite.findMany({
@@ -39,9 +28,6 @@ export async function GET(request) {
         });
 
         const favoriteListings = favorites.map(fav => fav.listing);
-
-        // Cache favorites for 5 minutes (300 seconds)
-        await CacheManager.set(cacheKey, favoriteListings, 300);
 
         return NextResponse.json(favoriteListings);
     } catch (error) {
@@ -93,11 +79,6 @@ export async function POST(request) {
             }
         });
 
-        // Invalidate favorites cache and listing cache
-        await CacheManager.del(CacheManager.keys.favorites(user.uid));
-        await CacheManager.del(CacheManager.keys.listing(listingId));
-        await CacheManager.delPattern('listings:*'); // Listing counts changed
-
         return NextResponse.json(favorite);
     } catch (error) {
         console.error('Add favorite error:', error);
@@ -140,11 +121,6 @@ export async function DELETE(request) {
                 }
             }
         });
-
-        // Invalidate favorites cache and listing cache
-        await CacheManager.del(CacheManager.keys.favorites(user.uid));
-        await CacheManager.del(CacheManager.keys.listing(listingId));
-        await CacheManager.delPattern('listings:*'); // Listing counts changed
 
         return NextResponse.json({ message: 'Favorite removed' });
     } catch (error) {

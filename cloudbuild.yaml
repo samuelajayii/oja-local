@@ -42,23 +42,3 @@ steps:
   
   - name: 'gcr.io/cloud-builders/docker'
     args: ['push', 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest']
-
-  # Deploy to GKE
-  - name: 'gcr.io/cloud-builders/gke-deploy'
-    args:
-      - run
-      - --filename=k8s/
-      - --cluster=$_CLUSTER_NAME
-      - --location=$_CLUSTER_ZONE
-      - --image=europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}
-
-images:
-  - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:${SHORT_SHA}'
-  - 'europe-west1-docker.pkg.dev/${PROJECT_ID}/oja-local/oja-local:latest'
-
-substitutions:
-  _CLUSTER_NAME: 'oja-local-cluster'
-  _CLUSTER_ZONE: 'europe-west1-b'
-
-options:
-  logging: CLOUD_LOGGING_ONLY
